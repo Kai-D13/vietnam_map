@@ -3,12 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Circa Store Map</title>
+  <title>Circa Area Map</title>
 
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
-  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
 
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -34,40 +33,20 @@
       flex-shrink: 0;
       z-index: 1000;
     }
-    .header-left h1 {
-      font-size: 18px;
-      font-weight: 700;
-      color: #f8fafc;
-      letter-spacing: 0.5px;
-    }
-    .header-left .subtitle {
-      font-size: 12px;
-      color: #94a3b8;
-      margin-top: 2px;
-    }
-    .header-left .built-by {
-      font-size: 10px;
-      color: #475569;
-      margin-top: 1px;
-      font-style: italic;
-    }
-    .header-right {
-      display: flex;
-      align-items: center;
-      gap: 14px;
-    }
-    #stats-bar {
+    .header-left h1 { font-size: 18px; font-weight: 700; color: #f8fafc; letter-spacing: 0.5px; }
+    .header-left .subtitle { font-size: 12px; color: #94a3b8; margin-top: 2px; }
+    .header-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+    .stat-chip {
       background: #1e293b;
       border: 1px solid #334155;
       border-radius: 8px;
-      padding: 7px 14px;
+      padding: 5px 12px;
       font-size: 12px;
       color: #94a3b8;
-      display: flex;
-      gap: 8px;
-      align-items: center;
+      white-space: nowrap;
     }
-    #stats-bar b { color: #f8fafc; }
+    .stat-chip b { color: #f8fafc; }
 
     /* ── Map container ── */
     #map-wrap { flex: 1; position: relative; }
@@ -76,7 +55,7 @@
     /* ── Loading overlay ── */
     #loading {
       position: absolute; inset: 0;
-      background: rgba(15, 23, 42, 0.9);
+      background: rgba(15, 23, 42, 0.92);
       display: flex; flex-direction: column;
       align-items: center; justify-content: center;
       z-index: 2000;
@@ -93,22 +72,27 @@
     }
     @keyframes spin { to { transform: rotate(360deg); } }
     #loading-text { font-size: 14px; color: #94a3b8; }
+    #loading-sub  { font-size: 11px; color: #475569; margin-top: 6px; }
 
-    /* ── Left Panel (Search) ── */
+    /* ── Left Panel ── */
     #left-panel {
       position: absolute;
       top: 12px; left: 12px;
-      width: 260px;
+      width: 270px;
       display: flex; flex-direction: column; gap: 10px;
       z-index: 1000;
       max-height: calc(100% - 24px);
+      overflow-y: auto;
+      scrollbar-width: none;
     }
+    #left-panel::-webkit-scrollbar { display: none; }
 
     .panel-card {
-      background: rgba(15, 23, 42, 0.93);
+      background: rgba(15, 23, 42, 0.94);
       border: 1px solid #334155;
       border-radius: 10px;
       padding: 12px;
+      -webkit-backdrop-filter: blur(8px);
       backdrop-filter: blur(8px);
     }
     .panel-title {
@@ -119,6 +103,7 @@
       margin-bottom: 8px;
     }
 
+    /* Search */
     #search-input {
       width: 100%;
       background: #1e293b;
@@ -132,409 +117,394 @@
     #search-input::placeholder { color: #475569; }
     #search-input:focus { border-color: #3b82f6; }
 
-    .store-list {
-      margin-top: 8px;
-      max-height: 220px;
-      overflow-y: auto;
-    }
-    .store-list::-webkit-scrollbar { width: 4px; }
-    .store-list::-webkit-scrollbar-track { background: transparent; }
-    .store-list::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
+    .area-list { margin-top: 8px; max-height: 200px; overflow-y: auto; }
+    .area-list::-webkit-scrollbar { width: 4px; }
+    .area-list::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
 
-    .store-item {
-      padding: 6px 8px;
-      border-radius: 6px;
-      cursor: pointer;
-      transition: background 0.12s;
-      display: flex; align-items: center; gap: 6px;
+    .area-item {
+      padding: 6px 8px; border-radius: 6px;
+      cursor: pointer; transition: background 0.12s;
     }
-    .store-item:hover { background: #1e293b; }
-    .store-item-info { flex: 1; min-width: 0; }
-    .store-item-name {
-      font-size: 12px; font-weight: 600;
-      color: #e2e8f0;
-      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    }
-    .store-item-code { font-size: 10px; color: #475569; margin-top: 1px; }
-    .store-item-orders {
-      font-size: 10px; font-weight: 700;
-      color: #3b82f6; flex-shrink: 0;
-      text-align: right;
-    }
+    .area-item:hover { background: #1e293b; }
+    .area-item-name { font-size: 12px; font-weight: 600; color: #e2e8f0; }
+    .area-item-sub  { font-size: 10px; color: #475569; margin-top: 1px; }
 
-    /* ── Route Panel ── */
-    .route-btn {
+    /* Filters */
+    .filter-group { margin-bottom: 10px; }
+    .filter-label { font-size: 10px; color: #64748b; margin-bottom: 4px; }
+    .filter-select {
       width: 100%;
-      padding: 8px;
+      background: #1e293b;
+      border: 1px solid #334155;
       border-radius: 6px;
-      border: none;
+      padding: 6px 8px;
       font-size: 12px;
-      font-weight: 600;
+      color: #f1f5f9;
+      outline: none;
       cursor: pointer;
-      transition: all 0.15s;
     }
-    .btn-primary {
-      background: #2563eb;
-      color: #fff;
-    }
-    .btn-primary:hover { background: #1d4ed8; }
-    .btn-primary.active {
-      background: #f59e0b;
-      color: #0f172a;
-    }
-    .btn-danger {
-      background: rgba(220, 38, 38, 0.15);
-      border: 1px solid rgba(220, 38, 38, 0.3);
-      color: #f87171;
-    }
-    .btn-danger:hover { background: rgba(220, 38, 38, 0.25); }
+    .filter-select:focus { border-color: #3b82f6; }
 
-    .route-slot {
-      margin-top: 8px;
-      padding: 7px 10px;
-      background: #0f172a;
-      border: 1px solid #334155;
-      border-radius: 7px;
-      display: flex; align-items: flex-start; gap: 8px;
+    /* Layer toggles */
+    .layer-toggle {
+      display: flex; align-items: center; gap: 8px;
+      padding: 5px 0; cursor: pointer;
+      -webkit-user-select: none; user-select: none;
     }
-    .route-slot-dot {
-      width: 10px; height: 10px;
-      border-radius: 50%;
-      flex-shrink: 0; margin-top: 3px;
+    .layer-toggle input[type=checkbox] {
+      width: 15px; height: 15px; cursor: pointer; accent-color: #3b82f6;
     }
-    .dot-from { background: #22c55e; }
-    .dot-to   { background: #ef4444; }
-    .route-slot-label { font-size: 10px; color: #64748b; }
-    .route-slot-name  {
-      font-size: 12px; font-weight: 600; color: #e2e8f0;
-      margin-top: 1px;
-      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-      max-width: 190px;
-    }
-    .route-slot-empty { font-size: 11px; color: #475569; margin-top: 1px; font-style: italic; }
+    .layer-toggle span { font-size: 12px; color: #cbd5e1; }
 
-    /* ── Route result card ── */
-    #route-result {
+    /* Legend */
+    #legend-box {
+      margin-top: 8px; padding: 8px;
+      background: #0f172a; border-radius: 6px; border: 1px solid #334155;
+    }
+    .legend-title { font-size: 10px; color: #64748b; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .legend-items { display: flex; flex-direction: column; gap: 4px; }
+    .legend-item  { display: flex; align-items: center; gap: 7px; }
+    .legend-item span { font-size: 11px; color: #cbd5e1; }
+    .legend-dot {
+      width: 12px; height: 12px;
+      border-radius: 50%; border: 1.5px solid rgba(255,255,255,0.5);
+      flex-shrink: 0;
+    }
+    .legend-dot-north { background: #3b82f6; }
+    .legend-dot-south { background: #f97316; }
+    .filter-group-last { margin-bottom: 0; }
+    .filter-select:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    .area-list-empty { font-size: 11px; color: #475569; padding: 6px 8px; }
+    .area-list-more  { font-size: 10px; color: #475569; padding: 6px 8px; text-align: center; }
+
+    /* ── Geocode progress banner ── */
+    #geocode-banner {
       display: none;
-      margin-top: 8px;
-      background: rgba(37, 99, 235, 0.08);
-      border: 1px solid rgba(37, 99, 235, 0.25);
+      align-items: center;
+      gap: 8px;
+      background: rgba(59, 130, 246, 0.12);
+      border: 1px solid rgba(59, 130, 246, 0.3);
       border-radius: 8px;
-      padding: 10px;
-    }
-    .route-result-stats {
-      display: flex; gap: 8px;
-    }
-    .route-stat {
-      flex: 1;
-      background: #0f172a;
-      border: 1px solid #334155;
-      border-radius: 7px;
-      padding: 8px;
-      text-align: center;
-    }
-    .route-stat-num {
-      font-size: 20px; font-weight: 800; line-height: 1;
-    }
-    .route-stat-num.blue  { color: #3b82f6; }
-    .route-stat-num.amber { color: #f59e0b; }
-    .route-stat-label { font-size: 10px; color: #64748b; margin-top: 3px; }
-    .route-note { font-size: 10px; color: #475569; margin-top: 6px; text-align: center; font-style: italic; }
-
-    /* ── Route select mode hint ── */
-    #route-hint {
-      position: absolute;
-      top: 12px; left: 50%; transform: translateX(-50%);
-      background: rgba(245, 158, 11, 0.9);
-      color: #0f172a;
-      font-size: 12px; font-weight: 700;
-      padding: 8px 18px;
-      border-radius: 20px;
-      z-index: 1500;
-      display: none;
+      padding: 5px 12px;
+      font-size: 11px;
+      color: #93c5fd;
       white-space: nowrap;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
     }
-
-    /* ── Store customer filter hint ── */
-    #store-hint {
-      position: absolute;
-      top: 12px; left: 50%; transform: translateX(-50%);
-      background: rgba(217, 119, 6, 0.95);
-      color: #fff;
-      font-size: 12px; font-weight: 700;
-      padding: 7px 14px;
-      border-radius: 20px;
-      z-index: 1490;
-      display: none;
-      align-items: center; gap: 10px;
-      white-space: nowrap;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.35);
-    }
-    #store-hint-close {
-      background: rgba(0,0,0,0.2);
-      border: none; color: #fff;
-      width: 18px; height: 18px;
+    #geocode-banner.visible { display: flex; }
+    .geocode-dot {
+      width: 7px; height: 7px;
       border-radius: 50%;
-      font-size: 12px; line-height: 18px; text-align: center;
-      cursor: pointer; padding: 0; flex-shrink: 0;
+      background: #3b82f6;
+      animation: geocodePulse 1.2s ease-in-out infinite;
+      flex-shrink: 0;
     }
-    #store-hint-close:hover { background: rgba(0,0,0,0.35); }
+    @keyframes geocodePulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50%       { opacity: 0.4; transform: scale(0.7); }
+    }
+    #geocode-pct { font-weight: 700; color: #f8fafc; }
 
-    /* ── Leaflet popup overrides ── */
+    /* Popup overrides */
     .leaflet-popup-content-wrapper {
-      background: #1e293b !important;
-      border: 1px solid #334155 !important;
-      border-radius: 12px !important;
-      color: #f1f5f9 !important;
+      background: #1e293b !important; border: 1px solid #334155 !important;
+      border-radius: 12px !important; color: #f1f5f9 !important;
       box-shadow: 0 8px 32px rgba(0,0,0,0.6) !important;
     }
     .leaflet-popup-tip { background: #1e293b !important; }
-    .leaflet-popup-close-button {
-      color: #64748b !important; font-size: 18px !important;
-      top: 6px !important; right: 8px !important;
-    }
+    .leaflet-popup-close-button { color: #64748b !important; font-size: 18px !important; top: 6px !important; right: 8px !important; }
     .leaflet-popup-content { margin: 14px 16px !important; }
 
-    /* ── Popup content styles ── */
-    .pop-header { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 10px; }
-    .pop-icon {
-      width: 36px; height: 36px; flex-shrink: 0;
-      background: rgba(16, 185, 129, 0.15);
-      border: 1px solid rgba(16, 185, 129, 0.3);
-      border-radius: 8px;
-      display: flex; align-items: center; justify-content: center;
+    /* Popup content */
+    .pop-title { font-size: 14px; font-weight: 700; color: #f8fafc; margin-bottom: 2px; }
+    .pop-sub   { font-size: 11px; color: #94a3b8; margin-bottom: 8px; line-height: 1.5; }
+    .pop-tags  { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+    .pop-tag {
+      font-size: 10px; font-weight: 700; padding: 2px 8px;
+      border-radius: 10px; letter-spacing: 0.5px;
     }
-    .pop-name  { font-size: 14px; font-weight: 700; color: #f8fafc; line-height: 1.3; }
-    .pop-code  { font-size: 10px; color: #64748b; margin-top: 2px; font-family: monospace; }
-    .pop-address {
-      font-size: 11px; color: #94a3b8; line-height: 1.5;
-      padding: 8px 0;
-      border-top: 1px solid #334155;
-      border-bottom: 1px solid #334155;
-      margin-bottom: 10px;
+    .tag-north { background: rgba(59,130,246,0.2); border: 1px solid rgba(59,130,246,0.4); color: #93c5fd; }
+    .tag-south { background: rgba(249,115,22,0.2); border: 1px solid rgba(249,115,22,0.4); color: #fdba74; }
+    .tag-fc    { background: rgba(16,185,129,0.2); border: 1px solid rgba(16,185,129,0.4); color: #6ee7b7; }
+
+    .pop-stats {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 6px; margin-top: 4px;
     }
-    .pop-stats { display: flex; gap: 10px; margin-bottom: 10px; }
     .pop-stat-box {
-      flex: 1;
-      background: #0f172a; border: 1px solid #334155;
-      border-radius: 8px; padding: 8px 10px; text-align: center;
+      background: #0f172a;
+      border: 1px solid #334155; border-radius: 8px;
+      padding: 7px 8px; text-align: center;
     }
-    .pop-stat-num  { font-size: 22px; font-weight: 800; line-height: 1; }
-    .pop-stat-num.blue  { color: #3b82f6; }
-    .pop-stat-num.green { color: #10b981; }
-    .pop-stat-label { font-size: 10px; color: #64748b; margin-top: 4px; }
+    .pop-stat-num   { font-size: 15px; font-weight: 800; line-height: 1; }
+    .pop-stat-label { font-size: 9px; color: #64748b; margin-top: 3px; }
+    .num-blue   { color: #3b82f6; }
+    .num-green  { color: #10b981; }
+    .num-amber  { color: #f59e0b; }
+    .num-purple { color: #a78bfa; }
 
-    /* Route action buttons in popup */
-    .pop-route-btns { display: flex; gap: 6px; }
-    .pop-route-btn {
-      flex: 1; padding: 6px 4px;
-      border: none; border-radius: 6px;
-      font-size: 11px; font-weight: 600;
-      cursor: pointer; transition: all 0.15s;
-    }
-    .pop-btn-from {
-      background: rgba(34, 197, 94, 0.15);
-      border: 1px solid rgba(34, 197, 94, 0.3);
-      color: #4ade80;
-    }
-    .pop-btn-from:hover { background: rgba(34, 197, 94, 0.25); }
-    .pop-btn-to {
-      background: rgba(239, 68, 68, 0.15);
-      border: 1px solid rgba(239, 68, 68, 0.3);
-      color: #f87171;
-    }
-    .pop-btn-to:hover { background: rgba(239, 68, 68, 0.25); }
-
-    /* ── Route slot inner wrapper ── */
-    .route-slot-body { flex: 1; min-width: 0; }
-    .route-slot-gap  { margin-top: 6px; }
-    .route-actions   { display: flex; gap: 6px; margin-top: 8px; }
-
-    /* ── Layer toggle panel ── */
-    .layer-toggle {
+    /* ── Hub panel ── */
+    .hub-panel-row {
       display: flex; align-items: center; gap: 8px;
-      padding: 6px 0;
+      margin-bottom: 8px;
+    }
+    .hub-btn {
+      flex: 1;
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: 12px;
+      color: #cbd5e1;
       cursor: pointer;
-      -webkit-user-select: none;
-      user-select: none;
+      transition: background 0.15s, border-color 0.15s;
+      text-align: center;
     }
-    .layer-toggle input[type=checkbox] {
-      width: 15px; height: 15px; cursor: pointer;
-      accent-color: #3b82f6;
+    .hub-btn:hover  { background: #273549; }
+    .hub-btn.active { background: #f97316; border-color: #f97316; color: #fff; }
+
+    .hub-radius-row {
+      display: flex; align-items: center; gap: 8px;
+      margin-bottom: 8px;
     }
-    .layer-toggle span { font-size: 12px; color: #cbd5e1; }
-    .layer-toggle small { font-size: 10px; color: #475569; }
-    #customer-count {
-      font-size: 11px; color: #64748b;
-      margin-top: 4px;
+    .hub-radius-row label { font-size: 11px; color: #94a3b8; white-space: nowrap; }
+    #radius-slider { flex: 1; accent-color: #f97316; cursor: pointer; }
+    #radius-label  { font-size: 12px; font-weight: 700; color: #f8fafc; min-width: 28px; text-align: right; }
+
+    .hub-wage-row {
+      display: flex; align-items: center; gap: 8px;
+      margin-bottom: 8px;
+    }
+    .hub-wage-row label { font-size: 11px; color: #94a3b8; white-space: nowrap; }
+    #wage-per-package {
+      flex: 1; min-width: 0;
+      background: #1e293b; border: 1px solid #334155;
+      border-radius: 5px; padding: 5px 8px;
+      font-size: 12px; color: #f1f5f9; outline: none;
       text-align: right;
     }
-    #points-legend {
-      display: none;
-      margin-top: 8px;
-      padding: 8px;
-      background: #0f172a;
-      border-radius: 6px;
+    #wage-per-package:focus { border-color: #f97316; }
+    .hub-wage-unit { font-size: 11px; color: #64748b; white-space: nowrap; }
+
+    .hub-clear-btn {
+      width: 100%;
+      background: transparent;
       border: 1px solid #334155;
+      border-radius: 6px;
+      padding: 5px;
+      font-size: 11px;
+      color: #64748b;
+      cursor: pointer;
+      transition: border-color 0.15s, color 0.15s;
+      margin-bottom: 8px;
     }
-    .legend-title {
-      font-size: 10px; color: #64748b;
-      margin-bottom: 5px;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
+    .hub-clear-btn:hover { border-color: #ef4444; color: #ef4444; }
+    .hub-clear-btn.hidden { display: none; }
+
+    /* Saved hub list */
+    #hub-list { display: flex; flex-direction: column; gap: 4px; }
+    .hub-item {
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 6px;
+      padding: 6px 8px;
+      display: flex; align-items: center; gap: 6px;
+      cursor: pointer;
+      transition: border-color 0.12s;
     }
-    .legend-items { display: flex; flex-direction: column; gap: 4px; }
-    .legend-item  { display: flex; align-items: center; gap: 6px; }
-    .legend-item span { font-size: 11px; color: #cbd5e1; }
-    .legend-dot {
-      display: inline-block;
-      border-radius: 50%;
-      border: 1px solid #fff;
+    .hub-item:hover { border-color: #7c3aed; }
+    .hub-item-icon {
+      width: 22px; height: 22px;
+      background: #7c3aed; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 700; color: #fff;
       flex-shrink: 0;
     }
-    .dot-low  { width: 10px; height: 10px; background: #a855f7; }
-    .dot-mid  { width: 12px; height: 12px; background: #f97316; }
-    .dot-high { width: 14px; height: 14px; background: #ef4444; }
+    .hub-item-info { flex: 1; min-width: 0; }
+    .hub-item-name { font-size: 12px; font-weight: 600; color: #e2e8f0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .hub-item-meta { font-size: 10px; color: #475569; margin-top: 1px; }
+    .hub-item-del  {
+      background: none; border: none; color: #475569;
+      cursor: pointer; font-size: 14px; padding: 2px 4px;
+      line-height: 1; border-radius: 4px;
+      transition: color 0.12s, background 0.12s;
+    }
+    .hub-item-del:hover { color: #ef4444; background: rgba(239,68,68,0.12); }
 
-    /* ── Store popup – customer list ── */
-    .pop-divider { height: 1px; background: #334155; margin: 8px 0; }
-    .pop-customers-header {
-      display: flex; justify-content: space-between; align-items: center;
-      font-size: 11px; color: #64748b; margin-bottom: 6px;
+    /* Geofence popup */
+    .gf-popup { min-width: 220px; }
+    .gf-popup h3 { font-size: 13px; font-weight: 700; color: #f8fafc; margin-bottom: 8px; }
+    .gf-stat-row { display: flex; justify-content: space-between; font-size: 12px; padding: 3px 0; border-bottom: 1px solid #334155; }
+    .gf-stat-row:last-of-type { border-bottom: none; }
+    .gf-stat-label { color: #94a3b8; }
+    .gf-stat-val   { color: #f8fafc; font-weight: 600; }
+    .gf-save-row   { margin-top: 10px; display: flex; gap: 6px; }
+    .gf-name-input {
+      flex: 1;
+      background: #0f172a; border: 1px solid #334155;
+      border-radius: 5px; padding: 5px 8px;
+      font-size: 12px; color: #f1f5f9; outline: none;
     }
-    .pop-cust-count { color: #3b82f6; font-weight: 700; }
-    .pop-customers-list {
-      max-height: 160px; overflow-y: auto;
-      scrollbar-width: thin; scrollbar-color: #334155 transparent;
+    .gf-name-input:focus { border-color: #7c3aed; }
+    .gf-save-btn {
+      background: #7c3aed; border: none; border-radius: 5px;
+      padding: 5px 12px; font-size: 12px; font-weight: 600;
+      color: #fff; cursor: pointer; white-space: nowrap;
+      transition: background 0.15s;
     }
-    .pop-customers-list::-webkit-scrollbar { width: 4px; }
-    .pop-customers-list::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
-    .pop-cust-item {
-      display: flex; justify-content: space-between; align-items: center;
-      padding: 4px 6px; border-radius: 5px;
-    }
-    .pop-cust-item:hover { background: #0f172a; }
-    .pop-cust-name {
-      font-size: 11px; color: #e2e8f0;
-      flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    }
-    .pop-cust-orders { font-size: 11px; color: #3b82f6; font-weight: 600; margin-left: 8px; flex-shrink: 0; }
-    .pop-cust-loading, .pop-cust-empty { font-size: 11px; color: #475569; font-style: italic; padding: 4px 6px; }
+    .gf-save-btn:hover    { background: #6d28d9; }
+    .gf-save-btn:disabled { background: #334155; color: #64748b; cursor: default; }
 
-    /* ── Cluster override ── */
-    .marker-cluster div {
-      background: rgba(16, 185, 129, 0.75) !important;
-      color: #f8fafc !important;
-      font-weight: 700 !important; font-size: 13px !important;
+    /* Hub markers */
+    .hub-pulse-wrap { position: relative; }
+    .hub-pulse {
+      width: 18px; height: 18px;
+      border-radius: 50%; background: #f97316;
+      position: absolute; top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      will-change: transform, opacity;
+      animation: hubPulse 1.2s ease-in-out infinite;
     }
-    .marker-cluster { background: rgba(30, 41, 59, 0.85) !important; }
+    @keyframes hubPulse {
+      0%, 100% { transform: translate(-50%,-50%) scale(1);   opacity: 1; }
+      50%       { transform: translate(-50%,-50%) scale(1.6); opacity: 0.45; }
+    }
+    .hub-saved-icon {
+      width: 26px; height: 26px;
+      background: #7c3aed; border: 2px solid #fff;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px; font-weight: 700; color: #fff;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+    }
   </style>
 </head>
 <body>
 
 <header>
   <div class="header-left">
-    <h1>Circa Store Map</h1>
-    <p class="subtitle">Bản đồ hệ thống cửa hàng thuốc Circa</p>
+    <h1>Circa Area Map</h1>
+    <p class="subtitle">Bản đồ địa bàn phường/xã toàn quốc</p>
   </div>
   <div class="header-right">
-    <div id="stats-bar">
-      Tổng cửa hàng: <b id="s-total">–</b>
+    <div id="geocode-banner">
+      <span class="geocode-dot"></span>
+      Geocoding: <span id="geocode-pct">0%</span>
+      (<span id="geocode-count">0</span> / 10,599)
     </div>
+    <div class="stat-chip">Địa bàn: <b id="s-total">–</b></div>
+    <div class="stat-chip">Hiển thị: <b id="s-visible">–</b></div>
+    <div class="stat-chip">Tổng đơn: <b id="s-orders">–</b></div>
   </div>
 </header>
 
 <div id="map-wrap">
   <div id="loading">
     <div class="spinner"></div>
-    <div id="loading-text">Đang tải dữ liệu cửa hàng...</div>
-  </div>
-
-  <!-- Top center hint when route mode active -->
-  <div id="route-hint"></div>
-
-  <!-- Top center hint when store customer filter active -->
-  <div id="store-hint">
-    <span id="store-hint-text"></span>
-    <button type="button" id="store-hint-close" title="Xóa bộ lọc">×</button>
+    <div id="loading-text">Đang tải dữ liệu địa bàn...</div>
+    <div id="loading-sub"></div>
   </div>
 
   <div id="map"></div>
 
-  <!-- Left Panel -->
   <div id="left-panel">
+
     <!-- Search -->
     <div class="panel-card">
       <div class="panel-title">Tìm kiếm</div>
-      <input id="search-input" type="text" placeholder="Tên hoặc mã cửa hàng..." autocomplete="off" />
-      <div class="store-list" id="store-list"></div>
+      <input id="search-input" type="text" placeholder="Phường/xã, quận/huyện, tỉnh thành..." autocomplete="off" />
+      <div class="area-list" id="area-list"></div>
     </div>
 
-    <!-- Layer Controls -->
+    <!-- Filters -->
+    <div class="panel-card">
+      <div class="panel-title">Bộ lọc</div>
+
+      <div class="filter-group">
+        <div class="filter-label">Tỉnh / Thành phố</div>
+        <select id="filter-province" class="filter-select" title="Tỉnh / Thành phố">
+          <option value="">-- Tất cả --</option>
+        </select>
+      </div>
+
+      <div class="filter-group">
+        <div class="filter-label">Quận / Huyện</div>
+        <select id="filter-district" class="filter-select" title="Quận / Huyện" disabled>
+          <option value="">-- Tất cả --</option>
+        </select>
+      </div>
+
+      <div class="filter-group filter-group-last">
+        <div class="filter-label">Xã / Phường</div>
+        <select id="filter-ward" class="filter-select" title="Xã / Phường" disabled>
+          <option value="">-- Tất cả --</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Layers -->
     <div class="panel-card">
       <div class="panel-title">Lớp dữ liệu</div>
       <label class="layer-toggle">
-        <input type="checkbox" id="chk-stores" checked />
-        <span>🏪 Cửa hàng</span>
+        <input type="checkbox" id="chk-points" checked />
+        <span>📍 Điểm địa bàn</span>
       </label>
       <label class="layer-toggle">
         <input type="checkbox" id="chk-heatmap" />
-        <span>🔥 Heatmap khách hàng</span>
+        <span>🔥 Heatmap đơn hàng</span>
       </label>
       <label class="layer-toggle">
-        <input type="checkbox" id="chk-points" />
-        <span>📍 Điểm khách hàng</span>
+        <input type="checkbox" id="chk-color-by-region" checked />
+        <span>🎨 Màu theo khu vực</span>
       </label>
-      <div id="customer-count"></div>
-      <div id="points-legend">
-        <div class="legend-title">Số đơn hàng</div>
+      <label class="layer-toggle">
+        <input type="checkbox" id="chk-boundaries" />
+        <span>🗺️ Ranh giới quận/huyện</span>
+      </label>
+
+      <div id="legend-box">
+        <div class="legend-title">Màu khu vực</div>
         <div class="legend-items">
-          <div class="legend-item"><i class="legend-dot dot-low"></i><span>Thấp (ít đơn)</span></div>
-          <div class="legend-item"><i class="legend-dot dot-mid"></i><span>Trung bình</span></div>
-          <div class="legend-item"><i class="legend-dot dot-high"></i><span>Cao (nhiều đơn)</span></div>
+          <div class="legend-item">
+            <i class="legend-dot legend-dot-north"></i>
+            <span>Miền Bắc (MIENBAC)</span>
+          </div>
+          <div class="legend-item">
+            <i class="legend-dot legend-dot-south"></i>
+            <span>Miền Nam (MIENNAM)</span>
+          </div>
         </div>
       </div>
     </div>
 
-    <!-- Route finder -->
+    <!-- Hub & Geofencing -->
     <div class="panel-card">
-      <div class="panel-title">Tính đường đi</div>
+      <div class="panel-title">Hub & Geofencing</div>
 
-      <div class="route-slot">
-        <div class="route-slot-dot dot-from"></div>
-        <div class="route-slot-body">
-          <div class="route-slot-label">Điểm xuất phát</div>
-          <div id="from-name" class="route-slot-empty">Chưa chọn</div>
-        </div>
+      <div class="hub-radius-row">
+        <label for="radius-slider">Bán kính:</label>
+        <input type="range" id="radius-slider" min="5" max="100" value="30"
+               aria-label="Bán kính hub (km)"
+               oninput="document.getElementById('radius-label').textContent = this.value" />
+        <span id="radius-label">30</span>&nbsp;km
       </div>
 
-      <div class="route-slot route-slot-gap">
-        <div class="route-slot-dot dot-to"></div>
-        <div class="route-slot-body">
-          <div class="route-slot-label">Điểm đến</div>
-          <div id="to-name" class="route-slot-empty">Chưa chọn</div>
-        </div>
+      <div class="hub-wage-row">
+        <label for="wage-per-package">Lương/kiện:</label>
+        <input type="number" id="wage-per-package" value="25000" min="0" step="1000"
+               aria-label="Đơn giá lương trên một kiện hàng (VNĐ)" />
+        <span class="hub-wage-unit">₫</span>
       </div>
 
-      <div id="route-result">
-        <div class="route-result-stats">
-          <div class="route-stat">
-            <div class="route-stat-num blue" id="res-dist">–</div>
-            <div class="route-stat-label">km</div>
-          </div>
-          <div class="route-stat">
-            <div class="route-stat-num amber" id="res-time">–</div>
-            <div class="route-stat-label">phút</div>
-          </div>
-        </div>
-        <div class="route-note">Ước tính theo tốc độ TB 25 km/h tại TP.HCM</div>
+      <div class="hub-panel-row">
+        <button type="button" id="btn-hub-mode" class="hub-btn" onclick="toggleHubMode()">📍 Đặt Hub</button>
       </div>
 
-      <div class="route-actions">
-        <button type="button" class="route-btn btn-danger" id="btn-clear-route" hidden>Xóa tuyến</button>
-      </div>
+      <button type="button" id="btn-hub-clear" class="hub-clear-btn hidden" onclick="clearGeofence()">✕ Xóa geofence hiện tại</button>
+
+      <div id="hub-list"></div>
     </div>
+
   </div>
 </div>
 
@@ -544,7 +514,7 @@
 <script>
 const TILEMAP_KEY = "{{ tilemap_key }}";
 
-// ── Map init ──────────────────────────────────────────────
+// ── Map init ──────────────────────────────────────────────────────────────────
 const map = L.map('map', { center: [16.0, 107.5], zoom: 6 });
 
 const vietmapTiles = L.tileLayer(
@@ -561,570 +531,623 @@ vietmapTiles.on('tileerror', () => {
 });
 vietmapTiles.addTo(map);
 
-// ── Encoded polyline decoder (Google algorithm) ───────────
-function decodePolyline(encoded) {
-  const points = [];
-  let idx = 0, lat = 0, lng = 0;
-  while (idx < encoded.length) {
-    let b, shift = 0, result = 0;
-    do { b = encoded.charCodeAt(idx++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
-    lat += (result & 1) ? ~(result >> 1) : (result >> 1);
-    shift = 0; result = 0;
-    do { b = encoded.charCodeAt(idx++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
-    lng += (result & 1) ? ~(result >> 1) : (result >> 1);
-    points.push([lat / 1e5, lng / 1e5]);
-  }
-  return points;
+// ── Vietnamese text normalization (removes diacritics for fuzzy search) ──────
+function normalizeText(s) {
+  return (s || '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[dđDĐ]/g, 'd')
+    .toLowerCase()
+    .trim();
 }
 
-// ── Pharmacy SVG icon (size-scaled by orders) ────────────
-function pharmacyIcon(sizeCategory) {
-  // sizeCategory: 0=tiny, 1=small, 2=medium, 3=large, 4=xlarge
-  const configs = [
-    { w: 22, h: 26, anchor: [11, 23], color: '#059669', opacity: 0.7 },  // tiny
-    { w: 28, h: 33, anchor: [14, 30], color: '#059669', opacity: 0.8 },  // small
-    { w: 34, h: 40, anchor: [17, 37], color: '#10b981', opacity: 0.9 },  // medium
-    { w: 40, h: 47, anchor: [20, 44], color: '#10b981', opacity: 1.0 },  // large
-    { w: 48, h: 56, anchor: [24, 53], color: '#34d399', opacity: 1.0 },  // xlarge
-  ];
-  const c = configs[sizeCategory];
-  const cx = c.w / 2;
-  const cy = c.h * 0.35;
-  const r  = c.w * 0.4;
-  const shadowRy = c.w * 0.1;
-  const crossW = c.w * 0.17;
-  const crossH = c.h * 0.26;
-  const crossX = cx - crossW / 2;
-  const crossY = cy - crossH / 2;
+// ── Color helpers ────────────────────────────────────────────────────────────
+const REGION_COLORS = { MIENBAC: '#3b82f6', MIENNAM: '#f97316' };
+const DEFAULT_COLOR = '#94a3b8';
+const DIMMED_COLOR  = '#475569';
 
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${c.w}" height="${c.h}" viewBox="0 0 ${c.w} ${c.h}" style="opacity:${c.opacity}">
-    <ellipse cx="${cx}" cy="${c.h - 3}" rx="${c.w * 0.28}" ry="${shadowRy}" fill="rgba(0,0,0,0.25)"/>
-    <path d="M${cx} 0 C${cx - r} 0 ${cx - r} ${cy * 0.6} ${cx - r} ${cy}
-             C${cx - r} ${cy + r * 1.2} ${cx} ${c.h - 4} ${cx} ${c.h - 4}
-             C${cx} ${c.h - 4} ${cx + r} ${cy + r * 1.2} ${cx + r} ${cy}
-             C${cx + r} ${cy * 0.6} ${cx + r} 0 ${cx} 0Z"
-          fill="${c.color}" stroke="white" stroke-width="1.5"/>
-    <circle cx="${cx}" cy="${cy}" r="${r * 0.72}" fill="white" opacity="0.95"/>
-    <rect x="${crossX}" y="${crossY}" width="${crossW}" height="${crossH}" rx="1.5" fill="${c.color}"/>
-    <rect x="${crossX - crossW * 0.65}" y="${crossY + crossH * 0.3}" width="${crossW * 2.3}" height="${crossH * 0.4}" rx="1.5" fill="${c.color}"/>
-  </svg>`;
-
-  return L.divIcon({
-    className: '',
-    html: svg,
-    iconSize:   [c.w, c.h],
-    iconAnchor: c.anchor,
-    popupAnchor:[0, -(c.h - 8)],
-  });
+function regionColor(salesRegion) {
+  return REGION_COLORS[salesRegion] || DEFAULT_COLOR;
 }
 
-// Determine size category from total_order_30d
-function getSizeCategory(orders, min30, max30) {
-  if (max30 === min30) return 2;
-  const ratio = (orders - min30) / (max30 - min30);
-  if (ratio < 0.2)  return 0;
-  if (ratio < 0.4)  return 1;
-  if (ratio < 0.6)  return 2;
-  if (ratio < 0.8)  return 3;
-  return 4;
+function orderRadius(order, maxOrder) {
+  if (!maxOrder || maxOrder === 0) return 5;
+  const ratio = Math.min(order / maxOrder, 1);
+  return 4 + ratio * 9;
 }
 
-// ── Popup HTML ────────────────────────────────────────────
-const storeSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>`;
+// ── State ────────────────────────────────────────────────────────────────────
+let allAreas       = [];
+let filteredAreas  = [];
+let clusterGroup   = null;
+let heatmapLayer   = null;
+let districtLayer  = null;
+let colorByRegion  = true;
+let filtersBuilt   = false;
+let mapFitted      = false;
 
-function makePopup(store) {
+// Hub / geofence state
+let hubMode        = false;
+let tempHubMarker  = null;
+let tempHubCircle  = null;
+let geofenceResult = null;   // { inside: Set<string>, outside: Set<string> }
+let pendingStats   = null;   // stats from most recent /api/geofence call
+let savedHubs      = [];
+
+const canvasRenderer = L.canvas({ padding: 0.5 });
+
+// ── Popup HTML ────────────────────────────────────────────────────────────────
+function fmtNum(n) {
+  if (n === null || n === undefined) return '—';
+  if (n >= 1_000_000_000) return (n / 1_000_000_000).toFixed(1) + 'B';
+  if (n >= 1_000_000)     return (n / 1_000_000).toFixed(1) + 'M';
+  if (n >= 1_000)         return (n / 1_000).toFixed(1) + 'K';
+  return Number(n).toLocaleString('vi-VN');
+}
+
+function makePopup(a) {
+  const regionTag = a.sales_region === 'MIENBAC'
+    ? `<span class="pop-tag tag-north">MIỀN BẮC</span>`
+    : `<span class="pop-tag tag-south">MIỀN NAM</span>`;
+  const fcTag = a.fc_code
+    ? `<span class="pop-tag tag-fc">FC: ${a.fc_code}</span>` : '';
+
   return `<div style="min-width:240px;max-width:280px;">
-    <div class="pop-header">
-      <div class="pop-icon">${storeSvg}</div>
-      <div>
-        <div class="pop-name">${store.pos_name}</div>
-        <div class="pop-code">${store.pos_code}</div>
-      </div>
-    </div>
-    <div class="pop-address">${store.full_address}</div>
+    <div class="pop-title">${a.ward}</div>
+    <div class="pop-sub">${a.district}<br>${a.province}</div>
+    <div class="pop-tags">${regionTag}${fcTag}</div>
     <div class="pop-stats">
       <div class="pop-stat-box">
-        <div class="pop-stat-num blue">${store.total_order_30d.toLocaleString('vi-VN')}</div>
-        <div class="pop-stat-label">Đơn 30 ngày</div>
+        <div class="pop-stat-num num-blue">${fmtNum(a.total_order)}</div>
+        <div class="pop-stat-label">Đơn hàng</div>
       </div>
       <div class="pop-stat-box">
-        <div class="pop-stat-num green">${store.total_order_90d.toLocaleString('vi-VN')}</div>
-        <div class="pop-stat-label">Đơn 90 ngày</div>
+        <div class="pop-stat-num num-green">${fmtNum(a.total_package)}</div>
+        <div class="pop-stat-label">Kiện hàng</div>
       </div>
-    </div>
-    <div class="pop-route-btns">
-      <button class="pop-route-btn pop-btn-from" onclick="setRoutePoint('from','${store.pos_code}')">📍 Xuất phát</button>
-      <button class="pop-route-btn pop-btn-to"   onclick="setRoutePoint('to','${store.pos_code}')">🏁 Điểm đến</button>
-    </div>
-    <div class="pop-divider"></div>
-    <div class="pop-customers-header">
-      <span>Khách hàng thuộc store</span>
-      <span class="pop-cust-count"></span>
-    </div>
-    <div class="pop-customers-list">
-      <div class="pop-cust-loading">Đang tải...</div>
+      <div class="pop-stat-box">
+        <div class="pop-stat-num num-amber">${fmtNum(a.total_gmv)}</div>
+        <div class="pop-stat-label">GMV (VNĐ)</div>
+      </div>
+      <div class="pop-stat-box">
+        <div class="pop-stat-num num-purple">${fmtNum(a.total_cod)}</div>
+        <div class="pop-stat-label">COD (VNĐ)</div>
+      </div>
     </div>
   </div>`;
 }
 
-// ── State ─────────────────────────────────────────────────
-let allStores  = [];
-let storeIndex = {};       // pos_code → store
-let markerMap  = {};       // pos_code → marker
-let clusterGroup = null;
-let routeFrom  = null;     // store object
-let routeTo    = null;     // store object
-let routeLine  = null;     // L.polyline
-let fromMarkerOverlay = null;
-let toMarkerOverlay   = null;
-let storeCustomerLayer = null;   // filtered customer points for selected store
-let selectedStoreMarker = null;  // single store marker shown when store is selected
+// ── Build cluster layer ───────────────────────────────────────────────────────
+function buildPoints(areas) {
+  if (clusterGroup) { map.removeLayer(clusterGroup); clusterGroup = null; }
 
-// ── Route point markers (overlay pins) ───────────────────
-function overlayIcon(color, label) {
-  return L.divIcon({
-    className: '',
-    html: `<div style="background:${color};color:#fff;font-size:10px;font-weight:700;
-                padding:3px 7px;border-radius:10px;white-space:nowrap;
-                box-shadow:0 2px 6px rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.3);">${label}</div>`,
-    iconAnchor: [0, 24],
-  });
-}
-
-// ── Exposed: set route point from popup buttons ───────────
-window.setRoutePoint = function(role, posCode) {
-  const store = storeIndex[posCode];
-  if (!store) return;
-
-  // Close any open popup
-  map.closePopup();
-
-  if (role === 'from') {
-    routeFrom = store;
-    document.getElementById('from-name').textContent = store.pos_name;
-    document.getElementById('from-name').className = 'route-slot-name';
-    if (fromMarkerOverlay) map.removeLayer(fromMarkerOverlay);
-    fromMarkerOverlay = L.marker([store.lat, store.lng], {
-      icon: overlayIcon('#22c55e', '▶ Xuất phát'),
-      zIndexOffset: 800,
-    }).addTo(map);
-  } else {
-    routeTo = store;
-    document.getElementById('to-name').textContent = store.pos_name;
-    document.getElementById('to-name').className = 'route-slot-name';
-    if (toMarkerOverlay) map.removeLayer(toMarkerOverlay);
-    toMarkerOverlay = L.marker([store.lat, store.lng], {
-      icon: overlayIcon('#ef4444', '■ Điểm đến'),
-      zIndexOffset: 800,
-    }).addTo(map);
-  }
-
-  document.getElementById('btn-clear-route').hidden = false;
-
-  if (routeFrom && routeTo) calculateRoute();
-};
-
-// ── Calculate & draw route ────────────────────────────────
-async function calculateRoute() {
-  const resultEl = document.getElementById('route-result');
-  resultEl.style.display = 'block';
-  document.getElementById('res-dist').textContent = '…';
-  document.getElementById('res-time').textContent = '…';
-
-  if (routeLine) { map.removeLayer(routeLine); routeLine = null; }
-
-  try {
-    const url = `/api/route?lat1=${routeFrom.lat}&lng1=${routeFrom.lng}&lat2=${routeTo.lat}&lng2=${routeTo.lng}`;
-    const data = await fetch(url).then(r => r.json());
-
-    if (data.error) throw new Error(data.error);
-
-    document.getElementById('res-dist').textContent = data.distance_km;
-    document.getElementById('res-time').textContent = data.duration_min;
-
-    // Draw route polyline
-    if (data.points) {
-      const coords = decodePolyline(data.points);
-      routeLine = L.polyline(coords, {
-        color: '#3b82f6',
-        weight: 5,
-        opacity: 0.85,
-        dashArray: null,
-        lineJoin: 'round',
-      }).addTo(map);
-
-      // Fit bounds to show the full route
-      const bounds = L.latLngBounds([
-        [routeFrom.lat, routeFrom.lng],
-        [routeTo.lat, routeTo.lng],
-      ]);
-      map.fitBounds(bounds.pad(0.2));
-    }
-  } catch (err) {
-    document.getElementById('res-dist').textContent = '—';
-    document.getElementById('res-time').textContent = '—';
-    console.error('Route error:', err);
-  }
-}
-
-// ── Clear route ───────────────────────────────────────────
-document.getElementById('btn-clear-route').addEventListener('click', () => {
-  routeFrom = null;
-  routeTo   = null;
-  if (routeLine)          { map.removeLayer(routeLine);          routeLine = null; }
-  if (fromMarkerOverlay)  { map.removeLayer(fromMarkerOverlay);  fromMarkerOverlay = null; }
-  if (toMarkerOverlay)    { map.removeLayer(toMarkerOverlay);    toMarkerOverlay = null; }
-  document.getElementById('from-name').textContent = 'Chưa chọn';
-  document.getElementById('from-name').className   = 'route-slot-empty';
-  document.getElementById('to-name').textContent   = 'Chưa chọn';
-  document.getElementById('to-name').className     = 'route-slot-empty';
-  document.getElementById('route-result').style.display = 'none';
-  document.getElementById('btn-clear-route').hidden = true;
-});
-
-// ── Build markers ─────────────────────────────────────────
-function buildMarkers(stores) {
-  if (clusterGroup) map.removeLayer(clusterGroup);
-  markerMap = {};
-
-  // Compute order range for icon scaling
-  const orders = stores.map(s => s.total_order_30d);
-  const min30  = Math.min(...orders);
-  const max30  = Math.max(...orders);
+  const maxOrder = Math.max(...areas.map(a => a.total_order || 0), 1);
 
   clusterGroup = L.markerClusterGroup({
-    maxClusterRadius: 50,
+    maxClusterRadius: 60,
+    chunkedLoading: true,
     iconCreateFunction(cluster) {
       const n = cluster.getChildCount();
+      const children = cluster.getAllChildMarkers();
+      const colorCounts = {};
+      children.forEach(m => {
+        const c = m.options._regionColor || DEFAULT_COLOR;
+        colorCounts[c] = (colorCounts[c] || 0) + 1;
+      });
+      const dominant = Object.entries(colorCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || DEFAULT_COLOR;
       return L.divIcon({
         className: '',
         html: `<div style="
-          background: rgba(16,185,129,0.88);
+          background: ${dominant}cc;
           border: 2.5px solid #fff;
           border-radius: 50%;
           width: 38px; height: 38px;
           display: flex; align-items: center; justify-content: center;
-          color: #fff; font-size: 13px; font-weight: 700;
+          color: #fff; font-size: 12px; font-weight: 700;
           box-shadow: 0 2px 10px rgba(0,0,0,0.45);">${n}</div>`,
         iconSize: [38, 38], iconAnchor: [19, 19],
       });
     },
   });
 
-  stores.forEach(store => {
-    const cat    = getSizeCategory(store.total_order_30d, min30, max30);
-    const marker = L.marker([store.lat, store.lng], { icon: pharmacyIcon(cat) })
-      .bindPopup(makePopup(store), { maxWidth: 300 });
+  areas.forEach(a => {
+    let color   = colorByRegion ? regionColor(a.sales_region) : '#3b82f6';
+    let opacity = 0.85;
 
-    marker.on('popupopen', async () => {
-      const el = marker.getPopup().getElement();
-      if (!el) return;
-      const listEl  = el.querySelector('.pop-customers-list');
-      const countEl = el.querySelector('.pop-cust-count');
-      try {
-        const customers = await fetchCustomers();
-        const storeCustomers = customers
-          .filter(c => c.pos_code === store.pos_code)
-          .sort((a, b) => b.orders - a.orders);
-        countEl.textContent = `(${storeCustomers.length})`;
-        if (storeCustomers.length === 0) {
-          listEl.innerHTML = '<div class="pop-cust-empty">Không có khách hàng</div>';
-          return;
-        }
-        listEl.innerHTML = storeCustomers.map(c =>
-          `<div class="pop-cust-item">
-            <span class="pop-cust-name">${c.name}</span>
-            <span class="pop-cust-orders">${c.orders} đơn</span>
-          </div>`
-        ).join('');
-      } catch (err) {
-        listEl.innerHTML = '<div class="pop-cust-empty">Lỗi tải dữ liệu</div>';
+    if (geofenceResult) {
+      const key = `${a.ward}|${a.district}|${a.province}`;
+      if (geofenceResult.outside.has(key)) {
+        color   = DIMMED_COLOR;
+        opacity = 0.25;
       }
-    });
+    }
 
-    markerMap[store.pos_code] = marker;
+    const radius = orderRadius(a.total_order, maxOrder);
+    const marker = L.circleMarker([a.lat, a.lng], {
+      radius,
+      fillColor:    color,
+      color:        '#fff',
+      weight:       1.2,
+      fillOpacity:  opacity,
+      renderer:     canvasRenderer,
+      _regionColor: color,
+    }).bindPopup(makePopup(a), { maxWidth: 300 });
+
     clusterGroup.addLayer(marker);
   });
 
-  clusterGroup.addTo(map);
+  if (document.getElementById('chk-points').checked) {
+    clusterGroup.addTo(map);
+  }
 }
 
-// ── Search sidebar ────────────────────────────────────────
-function buildStoreList(stores) {
-  const listEl = document.getElementById('store-list');
+// ── Heatmap ───────────────────────────────────────────────────────────────────
+function buildHeatmap(areas) {
+  if (heatmapLayer) { map.removeLayer(heatmapLayer); heatmapLayer = null; }
+  if (!document.getElementById('chk-heatmap').checked) return;
+
+  const maxOrder = Math.max(...areas.map(a => a.total_order || 0), 1);
+  const pts = areas.map(a => [a.lat, a.lng, (a.total_order || 0) / maxOrder]);
+
+  heatmapLayer = L.heatLayer(pts, {
+    radius: 25, blur: 18, maxZoom: 13,
+    gradient: {
+      0.1: '#8b0000', 0.3: '#dc143c', 0.5: '#ff6347',
+      0.7: '#ffa500', 0.9: '#ffd700', 1.0: '#ffffe0',
+    },
+    minOpacity: 0.3,
+  }).addTo(map);
+}
+
+// ── District boundaries ───────────────────────────────────────────────────────
+let districtGeoJSON = null;
+
+async function toggleBoundaries() {
+  const chk = document.getElementById('chk-boundaries');
+  if (!chk.checked) {
+    if (districtLayer) { map.removeLayer(districtLayer); districtLayer = null; }
+    return;
+  }
+  if (!districtGeoJSON) {
+    try {
+      const res = await fetch('/api/boundaries/districts');
+      if (!res.ok) { alert('districts.geojson chưa có — chạy download_districts.py trước'); chk.checked = false; return; }
+      districtGeoJSON = await res.json();
+    } catch (e) {
+      alert('Lỗi tải ranh giới: ' + e.message);
+      chk.checked = false;
+      return;
+    }
+  }
+  districtLayer = L.geoJSON(districtGeoJSON, {
+    style: { color: '#94a3b8', weight: 1, fillOpacity: 0.04 },
+    onEachFeature(feat, layer) {
+      const name = feat.properties?.name || feat.properties?.Name || feat.properties?.NAME || '';
+      if (name) layer.bindTooltip(name, { sticky: true, className: 'district-tooltip' });
+    },
+  }).addTo(map);
+}
+
+// ── Stats bar ─────────────────────────────────────────────────────────────────
+function updateStats(areas) {
+  const totalOrders = areas.reduce((s, a) => s + (a.total_order || 0), 0);
+  document.getElementById('s-visible').textContent = areas.length.toLocaleString('vi-VN');
+  document.getElementById('s-orders').textContent  = fmtNum(totalOrders);
+}
+
+// ── Filter logic ──────────────────────────────────────────────────────────────
+function applyFilters() {
+  const provinceVal = document.getElementById('filter-province').value;
+  const districtVal = document.getElementById('filter-district').value;
+  const wardVal     = document.getElementById('filter-ward').value;
+  const rawSearch   = document.getElementById('search-input').value.trim();
+  const searchNorm  = normalizeText(rawSearch);
+
+  filteredAreas = allAreas.filter(a => {
+    if (provinceVal && a.province !== provinceVal) return false;
+    if (districtVal && a.district !== districtVal) return false;
+    if (wardVal     && a.ward     !== wardVal)     return false;
+    if (searchNorm) {
+      const hay = normalizeText(`${a.ward} ${a.district} ${a.province}`);
+      if (!hay.includes(searchNorm)) return false;
+    }
+    return true;
+  });
+
+  buildPoints(filteredAreas);
+  buildHeatmap(filteredAreas);
+  buildAreaList(filteredAreas.slice(0, 100));
+  updateStats(filteredAreas);
+}
+
+// ── Search list ───────────────────────────────────────────────────────────────
+function buildAreaList(areas) {
+  const listEl = document.getElementById('area-list');
   listEl.innerHTML = '';
-  stores.forEach(store => {
+  if (areas.length === 0) {
+    const msg = document.createElement('div');
+    msg.className = 'area-list-empty';
+    msg.textContent = 'Không tìm thấy kết quả';
+    listEl.appendChild(msg);
+    return;
+  }
+  areas.forEach(a => {
     const div = document.createElement('div');
-    div.className = 'store-item';
+    div.className = 'area-item';
     div.innerHTML = `
-      <div class="store-item-info">
-        <div class="store-item-name">${store.pos_name}</div>
-        <div class="store-item-code">${store.pos_code}</div>
-      </div>
-      <div class="store-item-orders">${store.total_order_30d.toLocaleString('vi-VN')}</div>`;
-    div.addEventListener('click', () => {
-      const marker = markerMap[store.pos_code];
-      if (marker) clusterGroup.zoomToShowLayer(marker, () => marker.openPopup());
-      showStoreCustomers(store).catch(err => console.error('Store customers error:', err));
-    });
+      <div class="area-item-name">${a.ward}</div>
+      <div class="area-item-sub">${a.district} · ${a.province}</div>`;
+    div.addEventListener('click', () => { map.setView([a.lat, a.lng], 14); });
     listEl.appendChild(div);
+  });
+  if (filteredAreas.length > 100) {
+    const note = document.createElement('div');
+    note.className = 'area-list-more';
+    note.textContent = `... và ${(filteredAreas.length - 100).toLocaleString('vi-VN')} kết quả khác`;
+    listEl.appendChild(note);
+  }
+}
+
+// ── Populate filter dropdowns (runs once only) ────────────────────────────────
+function populateFilters(areas) {
+  if (filtersBuilt) return;
+  filtersBuilt = true;
+
+  const provSet = [...new Set(areas.map(a => a.province).filter(Boolean))].sort();
+  const provSel = document.getElementById('filter-province');
+  provSet.forEach(p => {
+    const opt = document.createElement('option');
+    opt.value = p; opt.textContent = p;
+    provSel.appendChild(opt);
   });
 }
 
-document.getElementById('search-input').addEventListener('input', function () {
-  const q = this.value.trim().toLowerCase();
-  const filtered = q
-    ? allStores.filter(s =>
-        s.pos_name.toLowerCase().includes(q) ||
-        s.pos_code.toLowerCase().includes(q)
-      )
-    : allStores;
-  buildStoreList(filtered);
-});
+function onProvinceChange() {
+  const province = document.getElementById('filter-province').value;
+  const distSel  = document.getElementById('filter-district');
+  const wardSel  = document.getElementById('filter-ward');
 
-// ── Load data ─────────────────────────────────────────────
+  // Reset district and ward
+  distSel.innerHTML = '<option value="">-- Tất cả --</option>';
+  wardSel.innerHTML = '<option value="">-- Tất cả --</option>';
+  wardSel.disabled  = true;
+
+  if (!province) {
+    distSel.disabled = true;
+  } else {
+    const districts = [...new Set(
+      allAreas.filter(a => a.province === province).map(a => a.district).filter(Boolean)
+    )].sort();
+    districts.forEach(d => {
+      const opt = document.createElement('option');
+      opt.value = d; opt.textContent = d;
+      distSel.appendChild(opt);
+    });
+    distSel.disabled = false;
+  }
+  applyFilters();
+}
+
+function onDistrictChange() {
+  const province = document.getElementById('filter-province').value;
+  const district = document.getElementById('filter-district').value;
+  const wardSel  = document.getElementById('filter-ward');
+
+  wardSel.innerHTML = '<option value="">-- Tất cả --</option>';
+
+  if (!district) {
+    wardSel.disabled = true;
+  } else {
+    const wards = [...new Set(
+      allAreas.filter(a => a.province === province && a.district === district)
+              .map(a => a.ward).filter(Boolean)
+    )].sort();
+    wards.forEach(w => {
+      const opt = document.createElement('option');
+      opt.value = w; opt.textContent = w;
+      wardSel.appendChild(opt);
+    });
+    wardSel.disabled = false;
+  }
+  applyFilters();
+}
+
+// ── Geocode progress banner ───────────────────────────────────────────────────
+let geocodePolling = null;
+
+function updateGeocodeBanner(ok, total, done) {
+  const banner = document.getElementById('geocode-banner');
+  if (done) { banner.classList.remove('visible'); return; }
+  const pct = Math.round(ok / total * 100);
+  document.getElementById('geocode-pct').textContent   = pct + '%';
+  document.getElementById('geocode-count').textContent = ok.toLocaleString('vi-VN');
+  banner.classList.add('visible');
+}
+
+async function checkGeocodeProgress() {
+  try {
+    const s = await fetch('/api/geocode_status').then(r => r.json());
+    updateGeocodeBanner(s.ok, s.total, s.done);
+    if (s.ok > 0) await renderMap();
+    if (s.done) {
+      clearInterval(geocodePolling);
+      geocodePolling = null;
+      document.getElementById('s-total').textContent = s.ok.toLocaleString('vi-VN');
+    }
+  } catch (_) {}
+}
+
+async function renderMap() {
+  const data = await fetch('/api/areas').then(r => r.json());
+  allAreas      = data.areas;
+  filteredAreas = allAreas;
+
+  document.getElementById('s-total').textContent = allAreas.length.toLocaleString('vi-VN');
+
+  populateFilters(allAreas);
+  buildPoints(allAreas);
+  buildAreaList(allAreas.slice(0, 100));
+  updateStats(allAreas);
+
+  if (!mapFitted && allAreas.length > 0) {
+    mapFitted = true;
+    const bounds = L.latLngBounds(allAreas.map(a => [a.lat, a.lng]));
+    map.fitBounds(bounds, { padding: [40, 40] });
+  }
+}
+
 async function loadData() {
   try {
-    const data = await fetch('/api/stores').then(r => r.json());
-    allStores = data.stores;
+    const status = await fetch('/api/geocode_status').then(r => r.json());
 
-    // Build index
-    allStores.forEach(s => { storeIndex[s.pos_code] = s; });
-
-    document.getElementById('s-total').textContent = allStores.length;
-
-    buildMarkers(allStores);
-    buildStoreList(allStores);
-
-    if (allStores.length > 0) {
-      map.fitBounds(
-        L.latLngBounds(allStores.map(s => [s.lat, s.lng])),
-        { padding: [60, 60] }
-      );
+    if (status.ok === 0) {
+      document.getElementById('loading-text').textContent = 'Chưa có dữ liệu geocode';
+      document.getElementById('loading-sub').textContent  =
+        'Chạy: python geocode_area.py — rồi refresh trang';
+      return;
     }
 
+    document.getElementById('loading-text').textContent =
+      `Đang tải ${status.ok.toLocaleString('vi-VN')} địa bàn...`;
+    document.getElementById('loading-sub').textContent = '';
+
+    await renderMap();
     document.getElementById('loading').classList.add('hidden');
+    updateGeocodeBanner(status.ok, status.total, status.done);
+
+    if (!status.done) {
+      geocodePolling = setInterval(checkGeocodeProgress, 30000);
+    }
   } catch (err) {
     document.getElementById('loading-text').textContent = 'Lỗi tải dữ liệu: ' + err.message;
+    document.getElementById('loading-sub').textContent  =
+      'Kiểm tra: server đang chạy? geocode_area.py đã chạy?';
     console.error(err);
   }
 }
 
+// ── Hub mode ──────────────────────────────────────────────────────────────────
+function toggleHubMode() {
+  hubMode = !hubMode;
+  document.getElementById('btn-hub-mode').classList.toggle('active', hubMode);
+  map.getContainer().style.cursor = hubMode ? 'crosshair' : '';
+}
+
+map.on('click', function (e) {
+  if (!hubMode) return;
+  placeHub(e.latlng.lat, e.latlng.lng);
+});
+
+async function placeHub(lat, lng) {
+  const radius = parseInt(document.getElementById('radius-slider').value, 10);
+
+  if (tempHubMarker) { map.removeLayer(tempHubMarker); tempHubMarker = null; }
+  if (tempHubCircle) { map.removeLayer(tempHubCircle); tempHubCircle = null; }
+
+  const icon = L.divIcon({
+    className: '',
+    html: '<div class="hub-pulse-wrap" style="width:18px;height:18px;position:relative;"><div class="hub-pulse"></div></div>',
+    iconSize: [18, 18], iconAnchor: [9, 9],
+  });
+  tempHubMarker = L.marker([lat, lng], { icon, zIndexOffset: 1000 }).addTo(map);
+  tempHubCircle = L.circle([lat, lng], {
+    radius:      radius * 1000,
+    color:       '#f97316',
+    weight:      2,
+    dashArray:   '6 4',
+    fillOpacity: 0.05,
+  }).addTo(map);
+
+  document.getElementById('btn-hub-clear').classList.remove('hidden');
+
+  let data;
+  try {
+    const res = await fetch('/api/geofence', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ lat, lng, radius_km: radius }),
+    });
+    data = await res.json();
+  } catch (e) {
+    console.error('Geofence error:', e);
+    return;
+  }
+
+  geofenceResult = {
+    inside:  new Set(data.inside),
+    outside: new Set(data.outside),
+  };
+  pendingStats = data.stats;
+
+  buildPoints(filteredAreas);
+  showGeofencePopup(lat, lng, radius, data.stats);
+}
+
+function getWagePerPackage() {
+  const v = parseFloat(document.getElementById('wage-per-package').value);
+  return isNaN(v) || v < 0 ? 0 : v;
+}
+
+function showGeofencePopup(lat, lng, radius, stats) {
+  const wage   = getWagePerPackage();
+  const salary = Math.round(stats.total_package * wage).toLocaleString('vi-VN');
+  const gmv    = Math.round(stats.total_gmv).toLocaleString('vi-VN');
+  const cod    = Math.round(stats.total_cod).toLocaleString('vi-VN');
+  const html = `<div class="gf-popup">
+    <h3>Trong bán kính ${radius} km</h3>
+    <div class="gf-stat-row"><span class="gf-stat-label">Địa bàn</span><span class="gf-stat-val">${geofenceResult ? geofenceResult.inside.size.toLocaleString('vi-VN') : 0} phường/xã</span></div>
+    <div class="gf-stat-row"><span class="gf-stat-label">Đơn hàng</span><span class="gf-stat-val">${Math.round(stats.total_order).toLocaleString('vi-VN')}</span></div>
+    <div class="gf-stat-row"><span class="gf-stat-label">Kiện hàng</span><span class="gf-stat-val">${Math.round(stats.total_package).toLocaleString('vi-VN')}</span></div>
+    <div class="gf-stat-row"><span class="gf-stat-label">GMV</span><span class="gf-stat-val">${gmv} ₫</span></div>
+    <div class="gf-stat-row"><span class="gf-stat-label">COD</span><span class="gf-stat-val">${cod} ₫</span></div>
+    <div class="gf-stat-row"><span class="gf-stat-label">Lương ước tính</span><span class="gf-stat-val">${salary} ₫ <span style="font-size:10px;color:#64748b;">(${wage.toLocaleString('vi-VN')} ₫/kiện)</span></span></div>
+    <div class="gf-save-row">
+      <input id="hub-name-input" class="gf-name-input" placeholder="Tên hub..." aria-label="Tên hub" />
+      <button type="button" id="btn-save-hub" class="gf-save-btn"
+        data-lat="${lat}" data-lng="${lng}" data-radius="${radius}"
+        onclick="saveHubFromPopup(this)">
+        Lưu
+      </button>
+    </div>
+  </div>`;
+
+  L.popup({ maxWidth: 300 })
+    .setLatLng([lat, lng])
+    .setContent(html)
+    .openOn(map);
+}
+
+function saveHubFromPopup(btn) {
+  btn.disabled = true;
+  const lat    = parseFloat(btn.dataset.lat);
+  const lng    = parseFloat(btn.dataset.lng);
+  const radius = parseFloat(btn.dataset.radius);
+  saveHub(lat, lng, radius);
+}
+
+async function saveHub(lat, lng, radius) {
+  const name  = document.getElementById('hub-name-input')?.value?.trim() || 'Hub';
+  const wage  = getWagePerPackage();
+  const stats = pendingStats ? { ...pendingStats, wage_per_package: wage } : {};
+
+  let hub;
+  try {
+    const res = await fetch('/api/hubs', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ name, lat, lng, radius_km: radius, stats }),
+    });
+    hub = await res.json();
+  } catch (e) {
+    console.error('Save hub error:', e);
+    if (btn) btn.disabled = false;
+    return;
+  }
+
+  savedHubs.push(hub);
+  addSavedHubMarker(hub);
+  renderHubList();
+  map.closePopup();
+}
+
+function addSavedHubMarker(hub) {
+  const icon = L.divIcon({
+    className: '',
+    html: '<div class="hub-saved-icon">H</div>',
+    iconSize: [26, 26], iconAnchor: [13, 13],
+  });
+  const marker = L.marker([hub.lat, hub.lng], { icon, zIndexOffset: 900 }).addTo(map);
+  marker._hubId = hub.id;
+  marker.bindPopup(`
+    <div style="min-width:180px;">
+      <div class="pop-title">${hub.name}</div>
+      <div class="pop-sub">Bán kính: ${hub.radius_km} km</div>
+      <button onclick="deleteHub('${hub.id}')" style="
+        margin-top:8px; background:#ef4444; border:none; border-radius:5px;
+        padding:5px 12px; color:#fff; font-size:12px; cursor:pointer; width:100%;">
+        Xóa hub
+      </button>
+    </div>`);
+}
+
+async function deleteHub(id) {
+  await fetch(`/api/hubs/${id}`, { method: 'DELETE' });
+  savedHubs = savedHubs.filter(h => h.id !== id);
+  map.eachLayer(l => { if (l._hubId === id) map.removeLayer(l); });
+  map.closePopup();
+  renderHubList();
+}
+
+function renderHubList() {
+  const el = document.getElementById('hub-list');
+  el.innerHTML = '';
+  savedHubs.forEach(hub => {
+    const item = document.createElement('div');
+    item.className = 'hub-item';
+    item.innerHTML = `
+      <div class="hub-item-icon">H</div>
+      <div class="hub-item-info">
+        <div class="hub-item-name">${hub.name}</div>
+        <div class="hub-item-meta">${hub.radius_km} km</div>
+      </div>
+      <button class="hub-item-del" title="Xóa" onclick="deleteHub('${hub.id}');event.stopPropagation()">×</button>`;
+    item.addEventListener('click', () => map.setView([hub.lat, hub.lng], 11));
+    el.appendChild(item);
+  });
+}
+
+function clearGeofence() {
+  geofenceResult = null;
+  if (tempHubMarker) { map.removeLayer(tempHubMarker); tempHubMarker = null; }
+  if (tempHubCircle) { map.removeLayer(tempHubCircle); tempHubCircle = null; }
+  document.getElementById('btn-hub-clear').classList.add('hidden');
+  map.closePopup();
+  buildPoints(filteredAreas);
+  if (hubMode) toggleHubMode();
+}
+
+async function loadSavedHubs() {
+  try {
+    const res = await fetch('/api/hubs');
+    savedHubs = await res.json();
+    savedHubs.forEach(addSavedHubMarker);
+    renderHubList();
+  } catch (_) {}
+}
+
+// ── Bootstrap ─────────────────────────────────────────────────────────────────
 loadData();
+loadSavedHubs();
 
-// ── Customer layers (heatmap + individual points) ─────────
-let customerData    = null;  // cached after first fetch
-let heatmapLayer    = null;
-let pointsLayer     = null;
-const canvasRenderer = L.canvas({ padding: 0.5 });
+// ── Event listeners ───────────────────────────────────────────────────────────
+document.getElementById('filter-province').addEventListener('change', onProvinceChange);
+document.getElementById('filter-district').addEventListener('change', onDistrictChange);
+document.getElementById('filter-ward').addEventListener('change', applyFilters);
 
-async function fetchCustomers() {
-  if (customerData) return customerData;
-  document.getElementById('customer-count').textContent = 'Đang tải...';
-  const resp = await fetch('/api/customers');
-  const json = await resp.json();
-  customerData = json.customers;
-  document.getElementById('customer-count').textContent =
-    `${customerData.length.toLocaleString('vi-VN')} khách hàng`;
-  return customerData;
-}
+let searchTimer;
+document.getElementById('search-input').addEventListener('input', () => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(applyFilters, 300);
+});
 
-// Kepler.gl Red → Orange → Yellow gradient for Leaflet.heat
-const HEATMAP_GRADIENT = {
-  0.10: '#8b0000',
-  0.20: '#b22222',
-  0.30: '#dc143c',
-  0.40: '#ff4500',
-  0.50: '#ff6347',
-  0.60: '#ff8c00',
-  0.70: '#ffa500',
-  0.80: '#ffd700',
-  0.90: '#ffff00',
-  1.00: '#ffffe0',
-};
-
-async function toggleHeatmap(on) {
-  if (!on) {
-    if (heatmapLayer) { map.removeLayer(heatmapLayer); heatmapLayer = null; }
-    return;
-  }
-  const customers = await fetchCustomers();
-  const maxOrders = Math.max(...customers.map(c => c.orders), 1);
-  const points = customers.map(c => [c.lat, c.lng, c.orders / maxOrders]);
-  heatmapLayer = L.heatLayer(points, {
-    radius:    30,
-    blur:      20,
-    maxZoom:   15,
-    gradient:  HEATMAP_GRADIENT,
-    minOpacity: 0.35,
-  }).addTo(map);
-}
-
-async function togglePoints(on) {
-  if (!on) {
-    if (pointsLayer) { map.removeLayer(pointsLayer); pointsLayer = null; }
-    return;
-  }
-  const customers = await fetchCustomers();
-  const maxOrders = Math.max(...customers.map(c => c.orders), 1);
-
-  // Tính phân vị (quantile) để chia 3 mức: thấp / trung / cao
-  const sorted    = [...customers].map(c => c.orders).sort((a, b) => a - b);
-  const q33       = sorted[Math.floor(sorted.length * 0.33)];
-  const q66       = sorted[Math.floor(sorted.length * 0.66)];
-
-  function pointColor(orders) {
-    if (orders <= q33) return '#a855f7';  // tím  – ít đơn
-    if (orders <= q66) return '#f97316';  // cam  – trung bình
-    return '#ef4444';                     // đỏ   – nhiều đơn
-  }
-  function pointRadius(orders) {
-    const ratio = maxOrders > 0 ? orders / maxOrders : 0;
-    return 3 + ratio * 8;  // 3px → 11px
-  }
-
-  pointsLayer = L.geoJSON({
-    type: 'FeatureCollection',
-    features: customers.map(c => ({
-      type: 'Feature',
-      properties: c,
-      geometry: { type: 'Point', coordinates: [c.lng, c.lat] }
-    }))
-  }, {
-    renderer: canvasRenderer,
-    pointToLayer(feature, latlng) {
-      const p = feature.properties;
-      return L.circleMarker(latlng, {
-        radius:      pointRadius(p.orders),
-        fillColor:   pointColor(p.orders),
-        color:       '#fff',
-        weight:      1.2,
-        fillOpacity: 0.88,
-      });
-    },
-    onEachFeature(feature, layer) {
-      const p = feature.properties;
-      const color = pointColor(p.orders);
-      layer.bindPopup(`
-        <div style="min-width:200px;">
-          <div style="font-weight:700;font-size:13px;margin-bottom:4px;">${p.district || ''}${p.district && p.province ? ' – ' : ''}${p.province || ''}</div>
-          <div style="font-size:11px;color:#94a3b8;margin-bottom:6px;">${p.address || p.ward || ''}</div>
-          <div style="font-size:15px;font-weight:800;color:${color};">${p.orders} đơn hàng</div>
-        </div>`, { maxWidth: 260 });
-    }
-  }).addTo(map);
-}
-
-// ── Store customer filter layer ───────────────────────────
-function clearStoreCustomers() {
-  if (storeCustomerLayer)  { map.removeLayer(storeCustomerLayer);  storeCustomerLayer = null; }
-  if (selectedStoreMarker) { map.removeLayer(selectedStoreMarker); selectedStoreMarker = null; }
-
-  // Restore clusterGroup (all stores)
-  if (clusterGroup && !map.hasLayer(clusterGroup)) {
-    clusterGroup.addTo(map);
-    document.getElementById('chk-stores').checked = true;
-  }
-  // Restore all-customers layer nếu checkbox vẫn đang bật
-  if (document.getElementById('chk-points').checked && pointsLayer && !map.hasLayer(pointsLayer)) {
-    pointsLayer.addTo(map);
-  }
-  document.getElementById('store-hint').style.display = 'none';
-}
-
-async function showStoreCustomers(store) {
-  // Dọn dẹp layer cũ (không restore clusterGroup — sẽ xử lý ngay bên dưới)
-  if (storeCustomerLayer)  { map.removeLayer(storeCustomerLayer);  storeCustomerLayer = null; }
-  if (selectedStoreMarker) { map.removeLayer(selectedStoreMarker); selectedStoreMarker = null; }
-  document.getElementById('store-hint').style.display = 'none';
-
-  // Ẩn toàn bộ store markers, chỉ giữ lại store được chọn
-  if (clusterGroup && map.hasLayer(clusterGroup)) {
-    map.removeLayer(clusterGroup);
-    document.getElementById('chk-stores').checked = false;
-  }
-  const orders30 = allStores.map(s => s.total_order_30d);
-  const cat = getSizeCategory(store.total_order_30d, Math.min(...orders30), Math.max(...orders30));
-  selectedStoreMarker = L.marker([store.lat, store.lng], {
-    icon: pharmacyIcon(cat),
-    zIndexOffset: 1000,
-  }).bindPopup(makePopup(store), { maxWidth: 300 }).addTo(map);
-
-  // Ẩn all-customers layer trong khi hiển thị store filter
-  if (pointsLayer && map.hasLayer(pointsLayer)) {
-    map.removeLayer(pointsLayer);
-  }
-
-  const customers = await fetchCustomers();
-  const filtered = customers.filter(c => c.pos_code === store.pos_code);
-
-  document.getElementById('store-hint-text').textContent =
-    `📍 ${store.pos_name} · ${filtered.length} khách hàng`;
-  document.getElementById('store-hint').style.display = 'flex';
-
-  if (filtered.length === 0) return;
-
-  const maxOrders = Math.max(...filtered.map(c => c.orders), 1);
-  storeCustomerLayer = L.geoJSON({
-    type: 'FeatureCollection',
-    features: filtered.map(c => ({
-      type: 'Feature',
-      properties: c,
-      geometry: { type: 'Point', coordinates: [c.lng, c.lat] }
-    }))
-  }, {
-    renderer: canvasRenderer,
-    pointToLayer(feature, latlng) {
-      const p = feature.properties;
-      const ratio = p.orders / maxOrders;
-      return L.circleMarker(latlng, {
-        radius:      5 + ratio * 7,
-        fillColor:   '#f59e0b',
-        color:       '#fff',
-        weight:      1.5,
-        fillOpacity: 0.92,
-      });
-    },
-    onEachFeature(feature, layer) {
-      const p = feature.properties;
-      layer.bindPopup(`
-        <div style="min-width:180px;">
-          <div style="font-weight:700;font-size:13px;margin-bottom:4px;">${p.name}</div>
-          <div style="font-size:11px;color:#94a3b8;margin-bottom:6px;">${p.address || p.ward || ''}</div>
-          <div style="font-size:14px;font-weight:800;color:#f59e0b;">${p.orders} đơn hàng</div>
-        </div>`, { maxWidth: 240 });
-    }
-  }).addTo(map);
-
-  // Fit map để thấy store + toàn bộ điểm khách hàng
-  const bounds = storeCustomerLayer.getBounds().extend([store.lat, store.lng]);
-  if (bounds.isValid()) map.fitBounds(bounds.pad(0.12));
-}
-
-document.getElementById('store-hint-close').addEventListener('click', clearStoreCustomers);
-
-document.getElementById('chk-stores').addEventListener('change', function () {
+document.getElementById('chk-points').addEventListener('change', function () {
   if (!clusterGroup) return;
-  if (this.checked) {
-    clusterGroup.addTo(map);
-  } else {
-    map.removeLayer(clusterGroup);
-  }
+  if (this.checked) clusterGroup.addTo(map);
+  else map.removeLayer(clusterGroup);
 });
 
 document.getElementById('chk-heatmap').addEventListener('change', function () {
-  toggleHeatmap(this.checked).catch(err => {
-    console.error('Heatmap error:', err);
-    this.checked = false;
-  });
+  if (this.checked) buildHeatmap(filteredAreas);
+  else if (heatmapLayer) { map.removeLayer(heatmapLayer); heatmapLayer = null; }
 });
-document.getElementById('chk-points').addEventListener('change', function () {
-  togglePoints(this.checked).catch(err => {
-    console.error('Points error:', err);
-    this.checked = false;
-  });
-  document.getElementById('points-legend').style.display = this.checked ? 'block' : 'none';
+
+document.getElementById('chk-color-by-region').addEventListener('change', function () {
+  colorByRegion = this.checked;
+  document.getElementById('legend-box').style.display = colorByRegion ? 'block' : 'none';
+  buildPoints(filteredAreas);
 });
+
+document.getElementById('chk-boundaries').addEventListener('change', toggleBoundaries);
 </script>
 </body>
 </html>

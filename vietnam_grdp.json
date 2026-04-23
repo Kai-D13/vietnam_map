@@ -1,0 +1,380 @@
+[
+  {
+    "rank": 1,
+    "province": "Bà Rịa – Vũng Tàu",
+    "grdp_vnd": 335.47,
+    "grdp_usd": 14228
+  },
+  {
+    "rank": 2,
+    "province": "Quảng Ninh",
+    "grdp_vnd": 198.78,
+    "grdp_usd": 8490
+  },
+  {
+    "rank": 3,
+    "province": "Hải Phòng",
+    "grdp_vnd": 173.93,
+    "grdp_usd": 7517
+  },
+  {
+    "rank": 4,
+    "province": "Bình Dương",
+    "grdp_vnd": 164.95,
+    "grdp_usd": 7339
+  },
+  {
+    "rank": 5,
+    "province": "Bắc Ninh",
+    "grdp_vnd": 163.82,
+    "grdp_usd": 7450
+  },
+  {
+    "rank": 6,
+    "province": "Thành phố Hồ Chí Minh",
+    "grdp_vnd": 157.54,
+    "grdp_usd": 6890
+  },
+  {
+    "rank": 7,
+    "province": "Hà Nội",
+    "grdp_vnd": 141.94,
+    "grdp_usd": 6093
+  },
+  {
+    "rank": 8,
+    "province": "Đồng Nai",
+    "grdp_vnd": 132.98,
+    "grdp_usd": 5741
+  },
+  {
+    "rank": 9,
+    "province": "Vĩnh Phúc",
+    "grdp_vnd": 127.8,
+    "grdp_usd": 5494
+  },
+  {
+    "rank": 10,
+    "province": "Thái Nguyên",
+    "grdp_vnd": 111.65,
+    "grdp_usd": 4831
+  },
+  {
+    "rank": 11,
+    "province": "Hưng Yên",
+    "grdp_vnd": 101.8,
+    "grdp_usd": 4396
+  },
+  {
+    "rank": 12,
+    "province": "Đà Nẵng",
+    "grdp_vnd": 101.41,
+    "grdp_usd": 4409
+  },
+  {
+    "rank": 13,
+    "province": "Quảng Ngãi",
+    "grdp_vnd": 97.4,
+    "grdp_usd": 4197
+  },
+  {
+    "rank": 14,
+    "province": "Long An",
+    "grdp_vnd": 90.16,
+    "grdp_usd": 3874
+  },
+  {
+    "rank": 15,
+    "province": "Lào Cai",
+    "grdp_vnd": 87.8,
+    "grdp_usd": 3790
+  },
+  {
+    "rank": 16,
+    "province": "Hải Dương",
+    "grdp_vnd": 87.25,
+    "grdp_usd": 3734
+  },
+  {
+    "rank": 17,
+    "province": "Hà Nam",
+    "grdp_vnd": 86.54,
+    "grdp_usd": 3739
+  },
+  {
+    "rank": 18,
+    "province": "Cần Thơ",
+    "grdp_vnd": 85.96,
+    "grdp_usd": 3697
+  },
+  {
+    "rank": 19,
+    "province": "Tây Ninh",
+    "grdp_vnd": 85.76,
+    "grdp_usd": 3701
+  },
+  {
+    "rank": 20,
+    "province": "Bình Phước",
+    "grdp_vnd": 85.38,
+    "grdp_usd": 3657
+  },
+  {
+    "rank": 21,
+    "province": "Bắc Giang",
+    "grdp_vnd": 82.33,
+    "grdp_usd": 3542
+  },
+  {
+    "rank": 22,
+    "province": "Ninh Bình",
+    "grdp_vnd": 80.86,
+    "grdp_usd": 3481
+  },
+  {
+    "rank": 23,
+    "province": "Ninh Thuận",
+    "grdp_vnd": 77.62,
+    "grdp_usd": 3300
+  },
+  {
+    "rank": 24,
+    "province": "Bình Thuận",
+    "grdp_vnd": 77.58,
+    "grdp_usd": 3320
+  },
+  {
+    "rank": 25,
+    "province": "Lâm Đồng",
+    "grdp_vnd": 77.35,
+    "grdp_usd": 3338
+  },
+  {
+    "rank": 26,
+    "province": "Khánh Hòa",
+    "grdp_vnd": 76.68,
+    "grdp_usd": 3305
+  },
+  {
+    "rank": 27,
+    "province": "Quảng Nam",
+    "grdp_vnd": 76.64,
+    "grdp_usd": 3292
+  },
+  {
+    "rank": 28,
+    "province": "Bình Định",
+    "grdp_vnd": 70.7,
+    "grdp_usd": 3038
+  },
+  {
+    "rank": 29,
+    "province": "Trà Vinh",
+    "grdp_vnd": 70.33,
+    "grdp_usd": 3054
+  },
+  {
+    "rank": 30,
+    "province": "Hà Tĩnh",
+    "grdp_vnd": 69.69,
+    "grdp_usd": 3128
+  },
+  {
+    "rank": 31,
+    "province": "Thanh Hóa",
+    "grdp_vnd": 67.81,
+    "grdp_usd": 2917
+  },
+  {
+    "rank": 32,
+    "province": "Hậu Giang",
+    "grdp_vnd": 66.6,
+    "grdp_usd": 2832
+  },
+  {
+    "rank": 33,
+    "province": "Kiên Giang",
+    "grdp_vnd": 66.37,
+    "grdp_usd": 2846
+  },
+  {
+    "rank": 34,
+    "province": "Vĩnh Long",
+    "grdp_vnd": 66.14,
+    "grdp_usd": 2965
+  },
+  {
+    "rank": 35,
+    "province": "Hoà Bình",
+    "grdp_vnd": 64.74,
+    "grdp_usd": 2832
+  },
+  {
+    "rank": 36,
+    "province": "Tiền Giang",
+    "grdp_vnd": 63.3,
+    "grdp_usd": 2796
+  },
+  {
+    "rank": 37,
+    "province": "Quảng Trị",
+    "grdp_vnd": 62.74,
+    "grdp_usd": 2700
+  },
+  {
+    "rank": 38,
+    "province": "Đồng Tháp",
+    "grdp_vnd": 62.0,
+    "grdp_usd": 2678
+  },
+  {
+    "rank": 39,
+    "province": "Cà Mau",
+    "grdp_vnd": 61.8,
+    "grdp_usd": 2617
+  },
+  {
+    "rank": 40,
+    "province": "Thái Bình",
+    "grdp_vnd": 59.8,
+    "grdp_usd": 2531
+  },
+  {
+    "rank": 41,
+    "province": "Đắk Nông",
+    "grdp_vnd": 59.6,
+    "grdp_usd": 2562
+  },
+  {
+    "rank": 42,
+    "province": "Phú Thọ",
+    "grdp_vnd": 59.34,
+    "grdp_usd": 2532
+  },
+  {
+    "rank": 43,
+    "province": "Bạc Liêu",
+    "grdp_vnd": 59.24,
+    "grdp_usd": 2605
+  },
+  {
+    "rank": 44,
+    "province": "Phú Yên",
+    "grdp_vnd": 57.96,
+    "grdp_usd": 2475
+  },
+  {
+    "rank": 45,
+    "province": "Huế",
+    "grdp_vnd": 56.72,
+    "grdp_usd": 2449
+  },
+  {
+    "rank": 46,
+    "province": "Đắk Lắk",
+    "grdp_vnd": 55.61,
+    "grdp_usd": 2437
+  },
+  {
+    "rank": 47,
+    "province": "Sóc Trăng",
+    "grdp_vnd": 54.77,
+    "grdp_usd": 2357
+  },
+  {
+    "rank": 48,
+    "province": "Quảng Bình",
+    "grdp_vnd": 54.71,
+    "grdp_usd": 2356
+  },
+  {
+    "rank": 49,
+    "province": "Gia Lai",
+    "grdp_vnd": 53.45,
+    "grdp_usd": 2353
+  },
+  {
+    "rank": 50,
+    "province": "An Giang",
+    "grdp_vnd": 53.34,
+    "grdp_usd": 2316
+  },
+  {
+    "rank": 51,
+    "province": "Kon Tum",
+    "grdp_vnd": 53.15,
+    "grdp_usd": 2253
+  },
+  {
+    "rank": 52,
+    "province": "Lạng Sơn",
+    "grdp_vnd": 51.71,
+    "grdp_usd": 2223
+  },
+  {
+    "rank": 53,
+    "province": "Nghệ An",
+    "grdp_vnd": 51.37,
+    "grdp_usd": 2210
+  },
+  {
+    "rank": 54,
+    "province": "Tuyên Quang",
+    "grdp_vnd": 51.16,
+    "grdp_usd": 2217
+  },
+  {
+    "rank": 55,
+    "province": "Bến Tre",
+    "grdp_vnd": 49.05,
+    "grdp_usd": 2106
+  },
+  {
+    "rank": 56,
+    "province": "Nam Định",
+    "grdp_vnd": 48.98,
+    "grdp_usd": 2106
+  },
+  {
+    "rank": 57,
+    "province": "Sơn La",
+    "grdp_vnd": 48.55,
+    "grdp_usd": 2132
+  },
+  {
+    "rank": 58,
+    "province": "Yên Bái",
+    "grdp_vnd": 47.5,
+    "grdp_usd": 2039
+  },
+  {
+    "rank": 59,
+    "province": "Lai Châu",
+    "grdp_vnd": 47.47,
+    "grdp_usd": 2125
+  },
+  {
+    "rank": 60,
+    "province": "Bắc Kạn",
+    "grdp_vnd": 46.9,
+    "grdp_usd": 1989
+  },
+  {
+    "rank": 61,
+    "province": "Điện Biên",
+    "grdp_vnd": 39.7,
+    "grdp_usd": 1706
+  },
+  {
+    "rank": 62,
+    "province": "Cao Bằng",
+    "grdp_vnd": 39.57,
+    "grdp_usd": 1712
+  },
+  {
+    "rank": 63,
+    "province": "Hà Giang",
+    "grdp_vnd": 33.54,
+    "grdp_usd": 1474
+  }
+]

@@ -1,0 +1,22 @@
+# Excel temp lock files
+~$*.xlsx
+
+# Python cache
+*.pyc
+__pycache__/
+
+# Dev-only scripts (not needed at runtime)
+geocode_area.py
+download_districts.py
+geocode_hcm.py
+
+# Large files not needed at runtime
+address_migration.json
+hubs.json
+
+# Local env file (Vercel uses dashboard env vars)
+.env
+
+# Misc
+*.jpg
+z7749875026673_*.jpg

@@ -1,52 +1,111 @@
-import json
 import os
+import json
+import math
+import time
 import openpyxl
 import requests
+from dotenv import load_dotenv
+from supabase import create_client as _sb_create
 from flask import Flask, jsonify, render_template, request
+
+load_dotenv()
 
 app = Flask(__name__)
 
-SERVICES_KEY = os.environ.get("VIETMAP_SERVICES_KEY", "e3464a9335a846e985861bdf43fd8700201a93af28006a40")
-TILEMAP_KEY  = os.environ.get("VIETMAP_TILEMAP_KEY",  "06fadcaa43886a1b8a3fd81709a1f9723bb3e25d1010554b")
-EXCEL_PATH          = os.path.join(os.path.dirname(__file__), "data_store.xlsx")
-CUSTOMER_EXCEL_PATH = os.path.join(os.path.dirname(__file__), "data_individua_point.xlsx")
+SERVICES_KEY      = os.environ.get("VIETMAP_SERVICES_KEY", "6ad21129f9a078c7ae857d4b3494c4ec426cc288368a6943")
+TILEMAP_KEY       = os.environ.get("VIETMAP_TILEMAP_KEY",  "15df1a01dfcd57afa42aa1813597f6b41113fde321954745")
+AREA_EXCEL_PATH   = os.path.join(os.path.dirname(__file__), "area_vietnam.xlsx")
+CACHE_PATH        = os.path.join(os.path.dirname(__file__), "geocode_cache.json")
+DISTRICTS_PATH    = os.path.join(os.path.dirname(__file__), "data", "districts.geojson")
+SUPABASE_URL      = os.environ.get("SUPABASE_URL", "https://stqihecpcipszapcavux.supabase.co")
+SUPABASE_KEY      = os.environ.get("SUPABASE_SERVICE_KEY", "")
 
-# Average car speed in HCM city (km/h) — used for travel time estimate
 HCM_AVG_SPEED_KMH = 25
 
+_area_data        = None   # cached list of area dicts
+_cache_mtime      = None   # mtime of geocode_cache.json when last loaded
+_districts_data   = None   # cached GeoJSON for district boundaries
 
-def load_stores():
-    wb = openpyxl.load_workbook(EXCEL_PATH)
+
+def _cache_file_mtime():
+    try:
+        return os.path.getmtime(CACHE_PATH)
+    except OSError:
+        return None
+
+
+def load_areas():
+    """Load and cache area data. Reloads only when geocode_cache.json changes."""
+    global _area_data, _cache_mtime
+
+    current_mtime = _cache_file_mtime()
+    if _area_data is not None and current_mtime == _cache_mtime:
+        return _area_data
+
+    t0 = time.time()
+
+    # Load geocode cache (row → {lat, lng, locality_gid})
+    geo = {}
+    if os.path.exists(CACHE_PATH):
+        with open(CACHE_PATH, "r", encoding="utf-8") as f:
+            geo = json.load(f)
+
+    wb = openpyxl.load_workbook(AREA_EXCEL_PATH, read_only=True, data_only=True)
     ws = wb.active
-    stores = []
-    for r in range(2, ws.max_row + 1):
-        pos_code        = ws.cell(r, 1).value
-        pos_name        = ws.cell(r, 2).value
-        full_address    = ws.cell(r, 3).value
-        total_order_30d = ws.cell(r, 4).value
-        total_order_90d = ws.cell(r, 5).value
-        location        = ws.cell(r, 6).value
+    areas = []
+    # iter_rows is O(n) — never use ws.cell(r,c) in read_only mode (it's O(n²))
+    for r_idx, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+        ward_name     = row[0]
+        district_name = row[1]
+        province_name = row[2]
+        fc_code       = row[3]
+        sales_region  = row[4]
+        address       = row[5]
+        total_order   = row[6]
+        total_package = row[7]
+        total_gmv     = row[8]
+        total_cod     = row[9]
 
-        if not location or not pos_name:
-            continue
+        entry = geo.get(str(r_idx))
+        if entry and entry.get("lat") is not None:
+            lat          = entry["lat"]
+            lng          = entry["lng"]
+            locality_gid = entry.get("locality_gid", "")
+        else:
+            # Fallback: lat/lng written directly to xlsx (after --merge)
+            # total_COD now occupies col 10; lat/lng would be at 11/12 after --merge
+            lat_cell = row[10] if len(row) > 10 else None
+            lng_cell = row[11] if len(row) > 11 else None
+            if lat_cell is None or lng_cell is None:
+                continue
+            try:
+                lat = float(lat_cell)
+                lng = float(lng_cell)
+            except (ValueError, TypeError):
+                continue
+            locality_gid = str(row[12] if len(row) > 12 else "") or ""
 
-        try:
-            lat_str, lng_str = str(location).split(",")
-            lat = float(lat_str.strip())
-            lng = float(lng_str.strip())
-        except Exception:
-            continue
-
-        stores.append({
-            "pos_code":        pos_code or "",
-            "pos_name":        pos_name or "",
-            "full_address":    full_address or "",
-            "total_order_30d": int(total_order_30d) if total_order_30d else 0,
-            "total_order_90d": int(total_order_90d) if total_order_90d else 0,
-            "lat":             lat,
-            "lng":             lng,
+        areas.append({
+            "ward":          str(ward_name or ""),
+            "district":      str(district_name or ""),
+            "province":      str(province_name or ""),
+            "fc_code":       str(fc_code or ""),
+            "sales_region":  str(sales_region or ""),
+            "address":       str(address or ""),
+            "total_order":   float(total_order) if total_order else 0,
+            "total_package": float(total_package) if total_package else 0,
+            "total_gmv":     float(total_gmv) if total_gmv else 0,
+            "total_cod":     float(total_cod) if total_cod else 0,
+            "locality_gid":  locality_gid,
+            "lat":           lat,
+            "lng":           lng,
         })
-    return stores
+
+    wb.close()
+    _area_data   = areas
+    _cache_mtime = current_mtime
+    print(f"[load_areas] Loaded {len(areas)} areas in {round(time.time()-t0, 2)}s")
+    return areas
 
 
 @app.route("/")
@@ -54,19 +113,25 @@ def index():
     return render_template("map.html", tilemap_key=TILEMAP_KEY)
 
 
-@app.route("/api/stores")
-def api_stores():
-    stores = load_stores()
-    return jsonify({"stores": stores})
+@app.route("/api/areas")
+def api_areas():
+    areas = load_areas()
+    return jsonify({"areas": areas, "total": len(areas)})
+
+
+@app.route("/api/geocode_status")
+def api_geocode_status():
+    if not os.path.exists(CACHE_PATH):
+        return jsonify({"cached": 0, "ok": 0, "total": 10599, "done": False})
+    with open(CACHE_PATH, "r", encoding="utf-8") as f:
+        geo = json.load(f)
+    cached = len(geo)
+    ok     = sum(1 for v in geo.values() if v.get("lat") is not None)
+    return jsonify({"cached": cached, "ok": ok, "total": 10599, "done": cached >= 10599})
 
 
 @app.route("/api/route")
 def api_route():
-    """
-    Proxy VietMap routing API.
-    Params: lat1, lng1, lat2, lng2
-    Returns: distance_km, duration_min (based on HCM avg speed), polyline points
-    """
     try:
         lat1 = float(request.args["lat1"])
         lng1 = float(request.args["lng1"])
@@ -75,22 +140,16 @@ def api_route():
     except (KeyError, ValueError):
         return jsonify({"error": "Missing or invalid lat1/lng1/lat2/lng2"}), 400
 
-    # VietMap routing API (GraphHopper-based)
     params = [
-        ("apikey", SERVICES_KEY),
-        ("point",  f"{lat1},{lng1}"),
-        ("point",  f"{lat2},{lng2}"),
-        ("vehicle", "car"),
+        ("apikey",         SERVICES_KEY),
+        ("point",          f"{lat1},{lng1}"),
+        ("point",          f"{lat2},{lng2}"),
+        ("vehicle",        "car"),
         ("points_encoded", "true"),
-        ("locale", "vi"),
+        ("locale",         "vi"),
     ]
-
     try:
-        r = requests.get(
-            "https://maps.vietmap.vn/api/route",
-            params=params,
-            timeout=15,
-        )
+        r = requests.get("https://maps.vietmap.vn/api/route", params=params, timeout=15)
         r.raise_for_status()
         data = r.json()
     except Exception as e:
@@ -99,62 +158,124 @@ def api_route():
     if "paths" not in data or not data["paths"]:
         return jsonify({"error": "No route found"}), 404
 
-    path = data["paths"][0]
-    distance_m  = path.get("distance", 0)       # metres
-    distance_km = round(distance_m / 1000, 1)
-
-    # Use HCM average speed for travel time
+    path         = data["paths"][0]
+    distance_km  = round(path.get("distance", 0) / 1000, 1)
     duration_min = round(distance_km / HCM_AVG_SPEED_KMH * 60)
 
     return jsonify({
         "distance_km":  distance_km,
         "duration_min": duration_min,
-        "points":       path.get("points", ""),  # encoded polyline
+        "points":       path.get("points", ""),
     })
 
 
-@app.route("/api/customers")
-def api_customers():
-    wb = openpyxl.load_workbook(CUSTOMER_EXCEL_PATH)
-    ws = wb.active
-    customers = []
-    for r in range(2, ws.max_row + 1):
-        pos_code = ws.cell(r, 1).value
-        pos_name = ws.cell(r, 2).value
-        name     = ws.cell(r, 3).value
-        phone    = ws.cell(r, 4).value
-        address  = ws.cell(r, 5).value
-        ward     = ws.cell(r, 6).value
-        district = ws.cell(r, 7).value
-        province = ws.cell(r, 8).value
-        lng      = ws.cell(r, 9).value
-        lat      = ws.cell(r, 10).value
-        orders   = ws.cell(r, 11).value
+@app.route("/api/boundaries/districts")
+def api_boundaries_districts():
+    global _districts_data
+    if _districts_data is None:
+        if not os.path.exists(DISTRICTS_PATH):
+            return jsonify({"error": "districts.geojson not found — run download_districts.py"}), 404
+        with open(DISTRICTS_PATH, "r", encoding="utf-8") as f:
+            _districts_data = json.load(f)
+    return jsonify(_districts_data)
 
-        if not lat or not lng:
-            continue
-        try:
-            lat = float(lat)
-            lng = float(lng)
-        except (ValueError, TypeError):
-            continue
 
-        customers.append({
-            "pos_code": str(pos_code or ""),
-            "pos_name": str(pos_name or ""),
-            "name":     str(name or ""),
-            "phone":    str(phone or ""),
-            "address":  str(address or ""),
-            "ward":     str(ward or ""),
-            "district": str(district or ""),
-            "province": str(province or ""),
-            "lat":      lat,
-            "lng":      lng,
-            "orders":   int(orders) if orders else 0,
-        })
-    return jsonify({"customers": customers})
+# ── Haversine distance ────────────────────────────────────────────────────────
+
+def haversine_km(lat1, lng1, lat2, lng2):
+    R = 6371
+    dlat = math.radians(lat2 - lat1)
+    dlng = math.radians(lng2 - lng1)
+    a = (math.sin(dlat / 2) ** 2
+         + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2))
+         * math.sin(dlng / 2) ** 2)
+    return R * 2 * math.asin(math.sqrt(a))
+
+
+# ── Supabase client (lazy init) ───────────────────────────────────────────────
+
+_supabase = None
+
+def get_supabase():
+    global _supabase
+    if _supabase is None:
+        _supabase = _sb_create(SUPABASE_URL, SUPABASE_KEY)
+    return _supabase
+
+
+# ── Hub CRUD via Supabase ─────────────────────────────────────────────────────
+
+@app.route("/api/hubs", methods=["GET"])
+def api_hubs_get():
+    try:
+        res = get_supabase().table("hubs").select("*").order("created_at").execute()
+        return jsonify(res.data)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/hubs", methods=["POST"])
+def api_hubs_post():
+    data = request.get_json()
+    if not data or "lat" not in data or "lng" not in data:
+        return jsonify({"error": "lat and lng required"}), 400
+    hub = {
+        "name":      data.get("name", "Hub"),
+        "lat":       float(data["lat"]),
+        "lng":       float(data["lng"]),
+        "radius_km": float(data.get("radius_km", 30)),
+        "stats":     data.get("stats", {}),
+    }
+    try:
+        res = get_supabase().table("hubs").insert(hub).execute()
+        return jsonify(res.data[0]), 201
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/hubs/<hub_id>", methods=["DELETE"])
+def api_hubs_delete(hub_id):
+    try:
+        get_supabase().table("hubs").delete().eq("id", hub_id).execute()
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ── Geofence ──────────────────────────────────────────────────────────────────
+
+@app.route("/api/geofence", methods=["POST"])
+def api_geofence():
+    data = request.get_json()
+    if not data or "lat" not in data or "lng" not in data:
+        return jsonify({"error": "lat and lng required"}), 400
+    try:
+        hub_lat   = float(data["lat"])
+        hub_lng   = float(data["lng"])
+        radius_km = float(data.get("radius_km", 30))
+    except (ValueError, TypeError):
+        return jsonify({"error": "Invalid lat/lng/radius_km"}), 400
+
+    areas  = load_areas()
+    inside = []
+    outside = []
+    stats  = {"total_order": 0, "total_package": 0, "total_gmv": 0, "total_cod": 0}
+
+    for a in areas:
+        key = f"{a['ward']}|{a['district']}|{a['province']}"
+        d   = haversine_km(hub_lat, hub_lng, a["lat"], a["lng"])
+        if d <= radius_km:
+            inside.append(key)
+            stats["total_order"]   += a["total_order"]
+            stats["total_package"] += a["total_package"]
+            stats["total_gmv"]     += a["total_gmv"]
+            stats["total_cod"]     += a["total_cod"]
+        else:
+            outside.append(key)
+
+    return jsonify({"inside": inside, "outside": outside, "stats": stats})
 
 
 if __name__ == "__main__":
-    print("Starting store map server at http://localhost:5000")
+    print("Starting Area Map server at http://localhost:5000")
     app.run(debug=True, port=5000)
