@@ -65,6 +65,7 @@ def load_areas():
         total_package = row[7]
         total_gmv     = row[8]
         total_cod     = row[9]
+        grdp          = row[10]
 
         entry = geo.get(str(r_idx))
         if entry and entry.get("lat") is not None:
@@ -73,9 +74,9 @@ def load_areas():
             locality_gid = entry.get("locality_gid", "")
         else:
             # Fallback: lat/lng written directly to xlsx (after --merge)
-            # total_COD now occupies col 10; lat/lng would be at 11/12 after --merge
-            lat_cell = row[10] if len(row) > 10 else None
-            lng_cell = row[11] if len(row) > 11 else None
+            # GRDP at col 11; lat/lng would be at 12/13 after --merge
+            lat_cell = row[11] if len(row) > 11 else None
+            lng_cell = row[12] if len(row) > 12 else None
             if lat_cell is None or lng_cell is None:
                 continue
             try:
@@ -83,7 +84,7 @@ def load_areas():
                 lng = float(lng_cell)
             except (ValueError, TypeError):
                 continue
-            locality_gid = str(row[12] if len(row) > 12 else "") or ""
+            locality_gid = str(row[13] if len(row) > 13 else "") or ""
 
         areas.append({
             "ward":          str(ward_name or ""),
@@ -96,6 +97,7 @@ def load_areas():
             "total_package": float(total_package) if total_package else 0,
             "total_gmv":     float(total_gmv) if total_gmv else 0,
             "total_cod":     float(total_cod) if total_cod else 0,
+            "grdp":          float(grdp) if grdp else 0,
             "locality_gid":  locality_gid,
             "lat":           lat,
             "lng":           lng,
