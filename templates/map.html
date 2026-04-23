@@ -616,8 +616,8 @@ function makePopup(a) {
         <div class="pop-stat-label">COD (VNĐ)</div>
       </div>
       <div class="pop-stat-box full-width">
-        <div class="pop-stat-num num-teal">${a.grdp ? a.grdp.toLocaleString('vi-VN') : '—'}</div>
-        <div class="pop-stat-label">GRDP tỉnh (nghìn tỷ ₫)</div>
+        <div class="pop-stat-num num-teal">${a.grdp ? a.grdp.toLocaleString('vi-VN', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' tr' : '—'}</div>
+        <div class="pop-stat-label">GRDP bình quân đầu người (triệu ₫/người/năm)</div>
       </div>
     </div>
   </div>`;
