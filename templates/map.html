@@ -379,6 +379,43 @@
       font-size: 12px; font-weight: 700; color: #fff;
       box-shadow: 0 2px 8px rgba(0,0,0,0.5);
     }
+
+    /* Carrier layer */
+    .carrier-icon {
+      width: 22px; height: 22px;
+      background: #0ea5e9; border: 2px solid #fff;
+      border-radius: 4px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 10px; font-weight: 700; color: #fff;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.45);
+    }
+    .departer-icon {
+      width: 26px; height: 26px;
+      background: #f43f5e; border: 2px solid #fff;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 700; color: #fff;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+    }
+    .carrier-coord-row { display: flex; gap: 6px; margin-top: 8px; }
+    .carrier-coord-input {
+      flex: 1;
+      background: #0f172a; border: 1px solid #334155;
+      border-radius: 5px; padding: 4px 6px;
+      font-size: 11px; color: #f1f5f9; outline: none;
+    }
+    .carrier-coord-input:focus { border-color: #0ea5e9; }
+    .carrier-action-btn {
+      width: 100%; display: block;
+      background: #0f172a; border: 1px solid #334155;
+      border-radius: 5px; padding: 5px 10px;
+      font-size: 11px; color: #94a3b8;
+      cursor: pointer; margin-top: 5px;
+      transition: border-color 0.15s, color 0.15s;
+      text-align: left;
+    }
+    .carrier-action-btn:hover { border-color: #0ea5e9; color: #0ea5e9; }
+    .carrier-action-btn.danger:hover { border-color: #ef4444; color: #ef4444; }
   </style>
 </head>
 <body>
@@ -463,6 +500,10 @@
         <input type="checkbox" id="chk-boundaries" />
         <span>🗺️ Ranh giới quận/huyện</span>
       </label>
+      <label class="layer-toggle">
+        <input type="checkbox" id="chk-carriers" checked />
+        <span>🚚 Carrier hubs</span>
+      </label>
 
       <div id="legend-box">
         <div class="legend-title">Màu khu vực</div>
@@ -513,6 +554,7 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.mini.min.js"></script>
 <script>
 const TILEMAP_KEY = "{{ tilemap_key }}";
 
@@ -575,6 +617,15 @@ let tempHubCircle  = null;
 let geofenceResult = null;   // { inside: Set<string>, outside: Set<string> }
 let pendingStats   = null;   // stats from most recent /api/geofence call
 let savedHubs      = [];
+
+// GRDP lookup: normalized province name -> { grdp_vnd, grdp_usd, province }
+let grdpByProvince = {};
+
+// Carrier layer state
+let carrierLayer        = null;
+let departerLayer       = null;
+let carrierCoverage     = null;   // Set<address_string> | null
+let carrierLayerVisible = true;
 
 const canvasRenderer = L.canvas({ padding: 0.5 });
 
@@ -666,6 +717,11 @@ function buildPoints(areas) {
         color   = DIMMED_COLOR;
         opacity = 0.25;
       }
+    }
+
+    if (carrierCoverage !== null && !carrierCoverage.has(a.address)) {
+      color   = DIMMED_COLOR;
+      opacity = 0.25;
     }
 
     const radius = orderRadius(a.total_order, maxOrder);
@@ -999,6 +1055,19 @@ function showGeofencePopup(lat, lng, radius, stats) {
   const salary = Math.round(stats.total_package * wage).toLocaleString('vi-VN');
   const gmv    = Math.round(stats.total_gmv).toLocaleString('vi-VN');
   const cod    = Math.round(stats.total_cod).toLocaleString('vi-VN');
+
+  // GRDP section — distinct provinces inside geofence
+  const grdpRows = getGrdpForGeofence();
+  const grdpHtml = grdpRows.length === 0 ? '' : `
+    <div style="margin-top:8px;border-top:1px solid #334155;padding-top:8px;">
+      <div style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin-bottom:5px;">GRDP bình quân đầu người</div>
+      ${grdpRows.map(r => `
+        <div class="gf-stat-row">
+          <span class="gf-stat-label" style="font-size:11px;">${r.province}</span>
+          <span class="gf-stat-val" style="font-size:11px;">${r.grdp_vnd != null ? r.grdp_vnd.toLocaleString('vi-VN', {minimumFractionDigits:2,maximumFractionDigits:2}) + ' tr ₫' : '—'}</span>
+        </div>`).join('')}
+    </div>`;
+
   const html = `<div class="gf-popup">
     <h3>Trong bán kính ${radius} km</h3>
     <div class="gf-stat-row"><span class="gf-stat-label">Địa bàn</span><span class="gf-stat-val">${geofenceResult ? geofenceResult.inside.size.toLocaleString('vi-VN') : 0} phường/xã</span></div>
@@ -1007,6 +1076,7 @@ function showGeofencePopup(lat, lng, radius, stats) {
     <div class="gf-stat-row"><span class="gf-stat-label">GMV</span><span class="gf-stat-val">${gmv} ₫</span></div>
     <div class="gf-stat-row"><span class="gf-stat-label">COD</span><span class="gf-stat-val">${cod} ₫</span></div>
     <div class="gf-stat-row"><span class="gf-stat-label">Lương ước tính</span><span class="gf-stat-val">${salary} ₫ <span style="font-size:10px;color:#64748b;">(${wage.toLocaleString('vi-VN')} ₫/kiện)</span></span></div>
+    ${grdpHtml}
     <div class="gf-save-row">
       <input id="hub-name-input" class="gf-name-input" placeholder="Tên hub..." aria-label="Tên hub" />
       <button type="button" id="btn-save-hub" class="gf-save-btn"
@@ -1015,9 +1085,19 @@ function showGeofencePopup(lat, lng, radius, stats) {
         Lưu
       </button>
     </div>
+    <div style="margin-top:6px;">
+      <button type="button" onclick="exportGeofenceExcel()" style="
+        width:100%; background:#0f172a; border:1px solid #334155;
+        border-radius:5px; padding:5px 12px; font-size:12px;
+        color:#94a3b8; cursor:pointer; transition:border-color 0.15s,color 0.15s;"
+        onmouseover="this.style.borderColor='#10b981';this.style.color='#10b981'"
+        onmouseout="this.style.borderColor='#334155';this.style.color='#94a3b8'">
+        Xuất Excel
+      </button>
+    </div>
   </div>`;
 
-  L.popup({ maxWidth: 300 })
+  L.popup({ maxWidth: 340 })
     .setLatLng([lat, lng])
     .setContent(html)
     .openOn(map);
@@ -1121,9 +1201,247 @@ async function loadSavedHubs() {
   } catch (_) {}
 }
 
+// ── GRDP helpers ─────────────────────────────────────────────────────────────
+
+function normalizeProvince(s) {
+  s = (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '');
+  s = s.replace(/–/g, '-').replace(/\s+/g, ' ').trim().toLowerCase();
+  s = s.replace(/^(thanh pho|tinh|tp\.?\s*)/i, '').trim();
+  return s;
+}
+
+async function loadGrdp() {
+  try {
+    const data = await fetch('/api/grdp').then(r => r.json());
+    grdpByProvince = {};
+    data.forEach(g => {
+      if (g.province) grdpByProvince[normalizeProvince(g.province)] = g;
+    });
+  } catch (e) { console.warn('GRDP load failed:', e); }
+}
+
+function getGrdpForGeofence() {
+  if (!geofenceResult) return [];
+  const seen = new Set(), result = [];
+  geofenceResult.inside.forEach(key => {
+    const province = key.split('|')[2];
+    const norm     = normalizeProvince(province);
+    if (!seen.has(norm)) {
+      seen.add(norm);
+      const g = grdpByProvince[norm];
+      result.push({ province, grdp_vnd: g ? g.grdp_vnd : null });
+    }
+  });
+  return result.sort((a, b) => (b.grdp_vnd || 0) - (a.grdp_vnd || 0));
+}
+
+// ── Excel export ──────────────────────────────────────────────────────────────
+
+function exportGeofenceExcel() {
+  if (!geofenceResult || geofenceResult.inside.size === 0) return;
+  const wage = getWagePerPackage();
+  const rows = [['Địa bàn', 'Đơn hàng', 'Kiện hàng', 'GMV (VNĐ)', 'COD (VNĐ)', 'Lương ước tính (VNĐ)', 'GRDP (triệu ₫/người/năm)']];
+  allAreas.forEach(a => {
+    const key = `${a.ward}|${a.district}|${a.province}`;
+    if (!geofenceResult.inside.has(key)) return;
+    rows.push([
+      `${a.ward}, ${a.district}, ${a.province}`,
+      a.total_order   || 0,
+      a.total_package || 0,
+      a.total_gmv     || 0,
+      a.total_cod     || 0,
+      Math.round((a.total_package || 0) * wage),
+      a.grdp          || '',
+    ]);
+  });
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{wch:55},{wch:12},{wch:12},{wch:16},{wch:16},{wch:20},{wch:24}];
+  XLSX.utils.book_append_sheet(wb, ws, 'Geofence');
+  XLSX.writeFile(wb, `geofence_hub_${Date.now()}.xlsx`);
+}
+
+// ── Carrier layer ─────────────────────────────────────────────────────────────
+
+async function loadCarriers() {
+  let raw;
+  try {
+    raw = await fetch('/api/carriers').then(r => r.json());
+  } catch (e) { console.error('Carrier load failed:', e); return; }
+
+  // Separate departers from carriers
+  const departersMeta = raw.find(r => r._departers);
+  const departers     = departersMeta ? departersMeta._departers : [];
+  const carriers      = raw.filter(r => !r._departers);
+
+  carrierLayer  = L.layerGroup();
+  departerLayer = L.layerGroup();
+
+  departers.forEach(d => {
+    const icon = L.divIcon({
+      className: '',
+      html: '<div class="departer-icon">K</div>',
+      iconSize: [26, 26], iconAnchor: [13, 13],
+    });
+    L.marker([d.lat, d.lng], { icon, zIndexOffset: 950 })
+      .bindPopup(`<div class="pop-title">${d.name}</div><div class="pop-sub">Kho xuất phát (Departer)</div>`)
+      .addTo(departerLayer);
+  });
+
+  carriers.forEach(c => {
+    const icon = L.divIcon({
+      className: '',
+      html: '<div class="carrier-icon">C</div>',
+      iconSize: [22, 22], iconAnchor: [11, 11],
+    });
+    const marker = L.marker([c.lat, c.lng], { icon, zIndexOffset: 850 });
+    marker._carrierName = c.carrier_name;
+    marker.bindPopup(function () { return makeCarrierPopup(c, marker); }, { maxWidth: 320 });
+    marker.on('popupopen',  () => highlightCarrierCoverage(c.carrier_name));
+    marker.on('popupclose', () => clearCarrierCoverage());
+    marker.addTo(carrierLayer);
+  });
+
+  if (carrierLayerVisible) {
+    carrierLayer.addTo(map);
+    departerLayer.addTo(map);
+  }
+}
+
+function makeCarrierPopup(c, marker) {
+  const div = document.createElement('div');
+  div.style.minWidth = '230px';
+
+  // Header
+  const title = document.createElement('div');
+  title.className   = 'pop-title';
+  title.textContent = c.carrier_name;
+  div.appendChild(title);
+
+  const sub = document.createElement('div');
+  sub.className = 'pop-sub';
+  sub.textContent = c.hub_name ? `${c.hub_name}\n${c.address}` : c.address;
+  div.appendChild(sub);
+
+  // Stats rows
+  function statRow(label, val) {
+    const row = document.createElement('div');
+    row.className = 'gf-stat-row';
+    row.innerHTML = `<span class="gf-stat-label">${label}</span><span class="gf-stat-val">${val}</span>`;
+    div.appendChild(row);
+  }
+  if (c.departer) statRow('Departer', c.departer);
+  statRow('Địa bàn phủ', `${c.coverage_count} phường/xã`);
+
+  // Coord edit form (hidden by default)
+  const coordDiv = document.createElement('div');
+  coordDiv.style.display = 'none';
+  const coordRow = document.createElement('div');
+  coordRow.className = 'carrier-coord-row';
+  const latInput = document.createElement('input');
+  latInput.className   = 'carrier-coord-input';
+  latInput.type        = 'number';
+  latInput.step        = '0.0001';
+  latInput.value       = c.lat;
+  latInput.placeholder = 'Lat';
+  const lngInput = document.createElement('input');
+  lngInput.className   = 'carrier-coord-input';
+  lngInput.type        = 'number';
+  lngInput.step        = '0.0001';
+  lngInput.value       = c.lng;
+  lngInput.placeholder = 'Lng';
+  coordRow.appendChild(latInput);
+  coordRow.appendChild(lngInput);
+  coordDiv.appendChild(coordRow);
+
+  const saveCoordBtn = document.createElement('button');
+  saveCoordBtn.className   = 'carrier-action-btn';
+  saveCoordBtn.textContent = 'Lưu tọa độ';
+  saveCoordBtn.addEventListener('click', function () {
+    const lat = parseFloat(latInput.value);
+    const lng = parseFloat(lngInput.value);
+    if (isNaN(lat) || isNaN(lng)) { alert('Tọa độ không hợp lệ'); return; }
+    saveCarrierCoords(c.carrier_name, lat, lng, marker, saveCoordBtn);
+  });
+  coordDiv.appendChild(saveCoordBtn);
+  div.appendChild(coordDiv);
+
+  // "Sửa tọa độ" toggle
+  const editBtn = document.createElement('button');
+  editBtn.className   = 'carrier-action-btn';
+  editBtn.textContent = 'Sửa tọa độ';
+  editBtn.addEventListener('click', function () {
+    coordDiv.style.display = 'block';
+    editBtn.style.display  = 'none';
+  });
+  div.appendChild(editBtn);
+
+  // "Ẩn khỏi bản đồ" button
+  const hideBtn = document.createElement('button');
+  hideBtn.className   = 'carrier-action-btn danger';
+  hideBtn.textContent = 'Ẩn khỏi bản đồ';
+  hideBtn.addEventListener('click', function () {
+    hideCarrier(c.carrier_name, marker, hideBtn);
+  });
+  div.appendChild(hideBtn);
+
+  return div;
+}
+
+async function highlightCarrierCoverage(carrierName) {
+  try {
+    const data = await fetch(`/api/carriers/${encodeURIComponent(carrierName)}/coverage`).then(r => r.json());
+    carrierCoverage = new Set(data.addresses);
+    buildPoints(filteredAreas);
+  } catch (e) { console.error('Coverage fetch failed:', e); }
+}
+
+function clearCarrierCoverage() {
+  if (carrierCoverage !== null) {
+    carrierCoverage = null;
+    buildPoints(filteredAreas);
+  }
+}
+
+async function saveCarrierCoords(carrierName, lat, lng, marker, btn) {
+  btn.disabled    = true;
+  btn.textContent = 'Đang lưu...';
+  try {
+    const res = await fetch(`/api/carriers/${encodeURIComponent(carrierName)}`, {
+      method:  'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ lat, lng }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    marker.setLatLng([lat, lng]);
+    map.closePopup();
+  } catch (e) {
+    alert('Lỗi lưu tọa độ: ' + e.message);
+    btn.disabled    = false;
+    btn.textContent = 'Lưu tọa độ';
+  }
+}
+
+async function hideCarrier(carrierName, marker, btn) {
+  if (!confirm(`Ẩn "${carrierName}" khỏi bản đồ?`)) return;
+  btn.disabled = true;
+  try {
+    const res = await fetch(`/api/carriers/${encodeURIComponent(carrierName)}`, { method: 'DELETE' });
+    if (!res.ok) throw new Error(await res.text());
+    if (carrierLayer) carrierLayer.removeLayer(marker);
+    map.removeLayer(marker);
+    map.closePopup();
+  } catch (e) {
+    alert('Lỗi ẩn carrier: ' + e.message);
+    btn.disabled = false;
+  }
+}
+
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 loadData();
 loadSavedHubs();
+loadCarriers();
+loadGrdp();
 
 // ── Event listeners ───────────────────────────────────────────────────────────
 document.getElementById('filter-province').addEventListener('change', onProvinceChange);
@@ -1154,6 +1472,18 @@ document.getElementById('chk-color-by-region').addEventListener('change', functi
 });
 
 document.getElementById('chk-boundaries').addEventListener('change', toggleBoundaries);
+
+document.getElementById('chk-carriers').addEventListener('change', function () {
+  carrierLayerVisible = this.checked;
+  if (!carrierLayer) return;
+  if (this.checked) {
+    carrierLayer.addTo(map);
+    if (departerLayer) departerLayer.addTo(map);
+  } else {
+    map.removeLayer(carrierLayer);
+    if (departerLayer) map.removeLayer(departerLayer);
+  }
+});
 </script>
 </body>
 </html>

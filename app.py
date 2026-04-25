@@ -2,6 +2,8 @@ import os
 import json
 import math
 import time
+import unicodedata
+import re
 import openpyxl
 import requests
 from dotenv import load_dotenv
@@ -12,19 +14,29 @@ load_dotenv()
 
 app = Flask(__name__)
 
-SERVICES_KEY      = os.environ.get("VIETMAP_SERVICES_KEY", "6ad21129f9a078c7ae857d4b3494c4ec426cc288368a6943")
-TILEMAP_KEY       = os.environ.get("VIETMAP_TILEMAP_KEY",  "15df1a01dfcd57afa42aa1813597f6b41113fde321954745")
-AREA_EXCEL_PATH   = os.path.join(os.path.dirname(__file__), "area_vietnam.xlsx")
-CACHE_PATH        = os.path.join(os.path.dirname(__file__), "geocode_cache.json")
-DISTRICTS_PATH    = os.path.join(os.path.dirname(__file__), "data", "districts.geojson")
-SUPABASE_URL      = os.environ.get("SUPABASE_URL", "https://stqihecpcipszapcavux.supabase.co")
-SUPABASE_KEY      = os.environ.get("SUPABASE_SERVICE_KEY", "")
+SERVICES_KEY    = os.environ.get("VIETMAP_SERVICES_KEY", "6ad21129f9a078c7ae857d4b3494c4ec426cc288368a6943")
+TILEMAP_KEY     = os.environ.get("VIETMAP_TILEMAP_KEY",  "15df1a01dfcd57afa42aa1813597f6b41113fde321954745")
+AREA_EXCEL_PATH = os.path.join(os.path.dirname(__file__), "area_vietnam.xlsx")
+CACHE_PATH      = os.path.join(os.path.dirname(__file__), "geocode_cache.json")
+DISTRICTS_PATH  = os.path.join(os.path.dirname(__file__), "data", "districts.geojson")
+GRDP_PATH       = os.path.join(os.path.dirname(__file__), "vietnam_grdp.json")
+MAPPING_PATH    = os.path.join(os.path.dirname(__file__), "mapping.xlsx")
+SUPABASE_URL    = os.environ.get("SUPABASE_URL", "https://stqihecpcipszapcavux.supabase.co")
+SUPABASE_KEY    = os.environ.get("SUPABASE_SERVICE_KEY", "")
+
+DEPARTERS = [
+    {"name": "Kho Cần Thơ",    "lat": 10.0039, "lng": 105.7725},
+    {"name": "Kho Bình Dương", "lat": 11.0827, "lng": 106.6784},
+    {"name": "Kho Bắc Ninh",  "lat": 21.1235, "lng": 105.9752},
+]
 
 HCM_AVG_SPEED_KMH = 25
 
-_area_data        = None   # cached list of area dicts
-_cache_mtime      = None   # mtime of geocode_cache.json when last loaded
-_districts_data   = None   # cached GeoJSON for district boundaries
+_area_data     = None
+_cache_mtime   = None
+_districts_data = None
+_grdp_data     = None
+_carriers_data = None
 
 
 def _cache_file_mtime():
@@ -32,6 +44,15 @@ def _cache_file_mtime():
         return os.path.getmtime(CACHE_PATH)
     except OSError:
         return None
+
+
+def _normalize_addr(s):
+    """Strip diacritics and collapse whitespace for fuzzy address matching."""
+    s = (s or '').strip()
+    s = unicodedata.normalize('NFD', s)
+    s = ''.join(c for c in s if unicodedata.category(c) != 'Mn')
+    s = re.sub(r'\s+', ' ', s)
+    return s.lower().strip()
 
 
 def load_areas():
@@ -44,7 +65,6 @@ def load_areas():
 
     t0 = time.time()
 
-    # Load geocode cache (row → {lat, lng, locality_gid})
     geo = {}
     if os.path.exists(CACHE_PATH):
         with open(CACHE_PATH, "r", encoding="utf-8") as f:
@@ -74,7 +94,6 @@ def load_areas():
             locality_gid = entry.get("locality_gid", "")
         else:
             # Fallback: lat/lng written directly to xlsx (after --merge)
-            # GRDP at col 11; lat/lng would be at 12/13 after --merge
             lat_cell = row[11] if len(row) > 11 else None
             lng_cell = row[12] if len(row) > 12 else None
             if lat_cell is None or lng_cell is None:
@@ -110,6 +129,99 @@ def load_areas():
     return areas
 
 
+def load_carriers():
+    """Load carrier data from mapping.xlsx, match coverage areas, apply Supabase overrides."""
+    global _carriers_data
+    if _carriers_data is not None:
+        return _carriers_data
+
+    t0 = time.time()
+
+    # Build address lookup from area data (exact + normalized)
+    areas = load_areas()
+    area_addr_exact = {a['address']: a['address'] for a in areas if a.get('address')}
+    area_addr_norm  = {_normalize_addr(a['address']): a['address'] for a in areas if a.get('address')}
+
+    wb = openpyxl.load_workbook(MAPPING_PATH, read_only=True, data_only=True)
+
+    # data_area columns: 0=province_name, 1=district_name, 2=ward_name, 3=address, 4=carrier_name
+    ws_area = wb['data_area']
+    carrier_area_map = {}
+    unmatched = 0
+    for row in ws_area.iter_rows(min_row=2, values_only=True):
+        carrier = str(row[4] or '').strip()
+        addr    = str(row[3] or '').strip()
+        if not carrier or not addr:
+            continue
+        if carrier not in carrier_area_map:
+            carrier_area_map[carrier] = []
+        if addr in area_addr_exact:
+            carrier_area_map[carrier].append(addr)
+        else:
+            norm = _normalize_addr(addr)
+            if norm in area_addr_norm:
+                carrier_area_map[carrier].append(area_addr_norm[norm])
+            else:
+                unmatched += 1
+
+    if unmatched:
+        print(f"[load_carriers] {unmatched} unmatched addresses (likely admin boundary renames)")
+
+    # data_hub columns: 0=carrier_name, 1=hub_name, 2=address, 3=ward_name, 4=district_name,
+    #                   5=province_name, 6=destination, 7=toa_do, 8=departer, 9=_latitude, 10=_longitude
+    ws_hub = wb['data_hub']
+    carriers = []
+    for row in ws_hub.iter_rows(min_row=2, values_only=True):
+        carrier_name = str(row[0] or '').strip()
+        hub_name     = str(row[1] or '').strip()
+        address      = str(row[2] or '').strip()
+        departer     = str(row[8] or '').strip()
+        lat          = row[9]
+        lng          = row[10]
+        if not carrier_name or lat is None or lng is None:
+            continue
+        try:
+            lat = float(lat)
+            lng = float(lng)
+        except (ValueError, TypeError):
+            continue
+        coverage = carrier_area_map.get(carrier_name, [])
+        carriers.append({
+            "carrier_name":       carrier_name,
+            "hub_name":           hub_name,
+            "address":            address,
+            "departer":           departer,
+            "lat":                lat,
+            "lng":                lng,
+            "coverage_count":     len(coverage),
+            "coverage_addresses": coverage,
+        })
+    wb.close()
+
+    # Apply Supabase overrides (lat/lng edits and soft-deletes)
+    try:
+        overrides    = get_supabase().table("carrier_overrides").select("*").execute().data
+        override_map = {o['carrier_name']: o for o in overrides}
+        result = []
+        for c in carriers:
+            ov = override_map.get(c['carrier_name'])
+            if ov:
+                if ov.get('hidden'):
+                    continue
+                if ov.get('lat') is not None:
+                    c['lat'] = ov['lat']
+                if ov.get('lng') is not None:
+                    c['lng'] = ov['lng']
+            result.append(c)
+        carriers = result
+    except Exception as e:
+        print(f"[load_carriers] Supabase override fetch failed: {e}")
+
+    _carriers_data = carriers
+    print(f"[load_carriers] Loaded {len(carriers)} carriers in {round(time.time()-t0, 2)}s")
+    return carriers
+
+
 @app.route("/")
 def index():
     return render_template("map.html", tilemap_key=TILEMAP_KEY)
@@ -130,6 +242,17 @@ def api_geocode_status():
     cached = len(geo)
     ok     = sum(1 for v in geo.values() if v.get("lat") is not None)
     return jsonify({"cached": cached, "ok": ok, "total": 10599, "done": cached >= 10599})
+
+
+@app.route("/api/grdp")
+def api_grdp():
+    global _grdp_data
+    if _grdp_data is None:
+        if not os.path.exists(GRDP_PATH):
+            return jsonify([])
+        with open(GRDP_PATH, "r", encoding="utf-8") as f:
+            _grdp_data = json.load(f)
+    return jsonify(_grdp_data)
 
 
 @app.route("/api/route")
@@ -180,6 +303,59 @@ def api_boundaries_districts():
         with open(DISTRICTS_PATH, "r", encoding="utf-8") as f:
             _districts_data = json.load(f)
     return jsonify(_districts_data)
+
+
+# ── Carriers ──────────────────────────────────────────────────────────────────
+
+@app.route("/api/carriers")
+def api_carriers():
+    carriers = load_carriers()
+    slim = [{k: v for k, v in c.items() if k != 'coverage_addresses'}
+            for c in carriers]
+    slim.append({"_departers": DEPARTERS})
+    return jsonify(slim)
+
+
+@app.route("/api/carriers/<path:carrier_name>/coverage")
+def api_carrier_coverage(carrier_name):
+    carriers = load_carriers()
+    for c in carriers:
+        if c['carrier_name'] == carrier_name:
+            return jsonify({"addresses": c['coverage_addresses']})
+    return jsonify({"error": "not found"}), 404
+
+
+@app.route("/api/carriers/<path:carrier_name>", methods=["PUT"])
+def api_carriers_put(carrier_name):
+    global _carriers_data
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "no data"}), 400
+    update = {"carrier_name": carrier_name}
+    if "lat" in data:
+        update["lat"] = float(data["lat"])
+    if "lng" in data:
+        update["lng"] = float(data["lng"])
+    try:
+        get_supabase().table("carrier_overrides").upsert(update).execute()
+        _carriers_data = None
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/carriers/<path:carrier_name>", methods=["DELETE"])
+def api_carriers_delete(carrier_name):
+    global _carriers_data
+    try:
+        get_supabase().table("carrier_overrides").upsert({
+            "carrier_name": carrier_name,
+            "hidden": True,
+        }).execute()
+        _carriers_data = None
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 # ── Haversine distance ────────────────────────────────────────────────────────
@@ -258,10 +434,10 @@ def api_geofence():
     except (ValueError, TypeError):
         return jsonify({"error": "Invalid lat/lng/radius_km"}), 400
 
-    areas  = load_areas()
-    inside = []
+    areas   = load_areas()
+    inside  = []
     outside = []
-    stats  = {"total_order": 0, "total_package": 0, "total_gmv": 0, "total_cod": 0}
+    stats   = {"total_order": 0, "total_package": 0, "total_gmv": 0, "total_cod": 0}
 
     for a in areas:
         key = f"{a['ward']}|{a['district']}|{a['province']}"
