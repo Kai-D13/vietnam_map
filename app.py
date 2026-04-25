@@ -135,6 +135,11 @@ def load_carriers():
     if _carriers_data is not None:
         return _carriers_data
 
+    if not os.path.exists(MAPPING_PATH):
+        print(f"[load_carriers] mapping.xlsx not found at {MAPPING_PATH}")
+        _carriers_data = []
+        return _carriers_data
+
     t0 = time.time()
 
     # Build address lookup from area data (exact + normalized)
