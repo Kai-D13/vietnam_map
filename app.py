@@ -177,12 +177,13 @@ def load_carriers():
     ws_hub = wb['data_hub']
     carriers = []
     for row in ws_hub.iter_rows(min_row=2, values_only=True):
-        carrier_name = str(row[0] or '').strip()
-        hub_name     = str(row[1] or '').strip()
-        address      = str(row[2] or '').strip()
-        departer     = str(row[8] or '').strip()
-        lat          = row[9]
-        lng          = row[10]
+        carrier_name  = str(row[0] or '').strip()
+        hub_name      = str(row[1] or '').strip()
+        address       = str(row[2] or '').strip()
+        province_name = str(row[5] or '').strip()
+        departer      = str(row[8] or '').strip()
+        lat           = row[9]
+        lng           = row[10]
         if not carrier_name or lat is None or lng is None:
             continue
         try:
@@ -195,6 +196,7 @@ def load_carriers():
             "carrier_name":       carrier_name,
             "hub_name":           hub_name,
             "address":            address,
+            "province_name":      province_name,
             "departer":           departer,
             "lat":                lat,
             "lng":                lng,

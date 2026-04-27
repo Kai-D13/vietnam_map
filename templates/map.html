@@ -416,6 +416,38 @@
     }
     .carrier-action-btn:hover { border-color: #0ea5e9; color: #0ea5e9; }
     .carrier-action-btn.danger:hover { border-color: #ef4444; color: #ef4444; }
+
+    /* ── Coverage active card ── */
+    #coverage-card { border-color: #fbbf24; }
+    .coverage-card-title { color: #fbbf24; }
+    .coverage-card-name  { font-size: 13px; font-weight: 700; color: #f8fafc; margin-bottom: 3px; }
+    .coverage-card-count { font-size: 11px; color: #94a3b8; margin-bottom: 8px; }
+    .coverage-legend {
+      display: flex; gap: 10px; font-size: 10px; color: #64748b; margin-bottom: 10px;
+    }
+    .coverage-legend-item { display: flex; align-items: center; gap: 4px; }
+    .coverage-dot {
+      width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex-shrink: 0;
+    }
+    .coverage-dot-yellow { background: #fbbf24; }
+    .coverage-dot-purple { background: #818cf8; }
+    .coverage-clear-btn {
+      width: 100%; background: transparent;
+      border: 1px solid #fbbf24; border-radius: 6px;
+      padding: 5px; font-size: 11px; color: #fbbf24;
+      cursor: pointer; transition: background 0.15s;
+    }
+    .coverage-clear-btn:hover { background: rgba(251,191,36,0.12); }
+
+    /* ── Carrier search ── */
+    #carrier-search-input {
+      width: 100%;
+      background: #1e293b; border: 1px solid #334155;
+      border-radius: 6px; padding: 7px 10px;
+      font-size: 12px; color: #f1f5f9; outline: none;
+    }
+    #carrier-search-input::placeholder { color: #475569; }
+    #carrier-search-input:focus { border-color: #3b82f6; }
   </style>
 </head>
 <body>
@@ -448,11 +480,34 @@
 
   <div id="left-panel">
 
-    <!-- Search -->
+    <!-- Active carrier coverage card -->
+    <div class="panel-card" id="coverage-card" style="display:none;">
+      <div class="panel-title coverage-card-title">Carrier đang active</div>
+      <div id="coverage-carrier-name" class="coverage-card-name"></div>
+      <div id="coverage-carrier-count" class="coverage-card-count"></div>
+      <div class="coverage-legend">
+        <span class="coverage-legend-item">
+          <span class="coverage-dot coverage-dot-yellow"></span>Coverage
+        </span>
+        <span class="coverage-legend-item">
+          <span class="coverage-dot coverage-dot-purple"></span>Cùng tỉnh
+        </span>
+      </div>
+      <button type="button" class="coverage-clear-btn" onclick="clearCarrierCoverage()">✕ Xóa coverage</button>
+    </div>
+
+    <!-- Search địa bàn -->
     <div class="panel-card">
-      <div class="panel-title">Tìm kiếm</div>
+      <div class="panel-title">Tìm kiếm địa bàn</div>
       <input id="search-input" type="text" placeholder="Phường/xã, quận/huyện, tỉnh thành..." autocomplete="off" />
       <div class="area-list" id="area-list"></div>
+    </div>
+
+    <!-- Search carrier / hub -->
+    <div class="panel-card">
+      <div class="panel-title">Tìm Carrier / Hub</div>
+      <input id="carrier-search-input" type="text" placeholder="Tên carrier, hub..." autocomplete="off" />
+      <div class="area-list" id="carrier-list" style="margin-top:8px;max-height:180px;"></div>
     </div>
 
     <!-- Filters -->
@@ -622,10 +677,14 @@ let savedHubs      = [];
 let grdpByProvince = {};
 
 // Carrier layer state
-let carrierLayer        = null;
-let departerLayer       = null;
-let carrierCoverage     = null;   // Set<address_string> | null
-let carrierLayerVisible = true;
+let carrierLayer          = null;
+let departerLayer         = null;
+let allCarriers           = [];     // full list for search
+let carrierCoverage       = null;   // Set<address_string> | null
+let activeCarrierProvince = null;
+let activeCarrierName     = null;
+let activeCarrierCount    = 0;
+let carrierLayerVisible   = true;
 
 const canvasRenderer = L.canvas({ padding: 0.5 });
 
@@ -719,9 +778,18 @@ function buildPoints(areas) {
       }
     }
 
-    if (carrierCoverage !== null && !carrierCoverage.has(a.address)) {
-      color   = DIMMED_COLOR;
-      opacity = 0.25;
+    if (carrierCoverage !== null) {
+      if (carrierCoverage.has(a.address)) {
+        color   = '#fbbf24';
+        opacity = 1.0;
+      } else if (activeCarrierProvince &&
+                 normalizeText(a.province) === normalizeText(activeCarrierProvince)) {
+        color   = '#818cf8';
+        opacity = 0.75;
+      } else {
+        color   = DIMMED_COLOR;
+        opacity = 0.12;
+      }
     }
 
     const radius = orderRadius(a.total_order, maxOrder);
@@ -1288,6 +1356,8 @@ async function loadCarriers() {
       .addTo(departerLayer);
   });
 
+  allCarriers = carriers;
+
   carriers.forEach(c => {
     const icon = L.divIcon({
       className: '',
@@ -1297,8 +1367,7 @@ async function loadCarriers() {
     const marker = L.marker([c.lat, c.lng], { icon, zIndexOffset: 850 });
     marker._carrierName = c.carrier_name;
     marker.bindPopup(function () { return makeCarrierPopup(c, marker); }, { maxWidth: 320 });
-    marker.on('popupopen',  () => highlightCarrierCoverage(c.carrier_name));
-    marker.on('popupclose', () => clearCarrierCoverage());
+    marker.on('popupopen', () => activateCarrierCoverage(c));
     marker.addTo(carrierLayer);
   });
 
@@ -1388,19 +1457,87 @@ function makeCarrierPopup(c, marker) {
   return div;
 }
 
-async function highlightCarrierCoverage(carrierName) {
+async function activateCarrierCoverage(carrier) {
   try {
-    const data = await fetch(`/api/carriers/${encodeURIComponent(carrierName)}/coverage`).then(r => r.json());
-    carrierCoverage = new Set(data.addresses);
+    const data = await fetch(
+      `/api/carriers/${encodeURIComponent(carrier.carrier_name)}/coverage`
+    ).then(r => r.json());
+
+    carrierCoverage       = new Set(data.addresses);
+    activeCarrierProvince = carrier.province_name || null;
+    activeCarrierName     = carrier.carrier_name;
+    activeCarrierCount    = carrier.coverage_count;
+
+    const chkPts = document.getElementById('chk-points');
+    if (!chkPts.checked) chkPts.checked = true;
+
     buildPoints(filteredAreas);
+    showCoverageCard();
+
+    // Fit to province for context, fallback to coverage bounds
+    const provinceAreas = activeCarrierProvince
+      ? allAreas.filter(a => normalizeText(a.province) === normalizeText(activeCarrierProvince))
+      : [];
+    const boundsSource = provinceAreas.length > 0
+      ? provinceAreas
+      : allAreas.filter(a => carrierCoverage.has(a.address));
+    if (boundsSource.length > 0) {
+      const bounds = L.latLngBounds(boundsSource.map(a => [a.lat, a.lng]));
+      map.fitBounds(bounds, { padding: [60, 60], maxZoom: 12 });
+    }
   } catch (e) { console.error('Coverage fetch failed:', e); }
 }
 
 function clearCarrierCoverage() {
-  if (carrierCoverage !== null) {
-    carrierCoverage = null;
-    buildPoints(filteredAreas);
+  if (carrierCoverage === null) return;
+  carrierCoverage       = null;
+  activeCarrierProvince = null;
+  activeCarrierName     = null;
+  activeCarrierCount    = 0;
+  buildPoints(filteredAreas);
+  hideCoverageCard();
+}
+
+function showCoverageCard() {
+  document.getElementById('coverage-carrier-name').textContent = activeCarrierName;
+  document.getElementById('coverage-carrier-count').textContent =
+    `${activeCarrierCount} phường/xã được phủ`;
+  document.getElementById('coverage-card').style.display = 'block';
+}
+
+function hideCoverageCard() {
+  document.getElementById('coverage-card').style.display = 'none';
+}
+
+function onCarrierSearch() {
+  const q      = normalizeText(document.getElementById('carrier-search-input').value.trim());
+  const listEl = document.getElementById('carrier-list');
+  listEl.innerHTML = '';
+  if (!q || allCarriers.length === 0) return;
+
+  const matches = allCarriers
+    .filter(c =>
+      normalizeText(c.carrier_name).includes(q) ||
+      normalizeText(c.hub_name || '').includes(q))
+    .slice(0, 15);
+
+  if (matches.length === 0) {
+    listEl.innerHTML = '<div class="area-list-empty">Không tìm thấy carrier</div>';
+    return;
   }
+  matches.forEach(c => {
+    const div = document.createElement('div');
+    div.className = 'area-item';
+    div.innerHTML = `
+      <div class="area-item-name">${c.carrier_name}</div>
+      <div class="area-item-sub">${c.hub_name || ''} · ${c.province_name || ''} · ${c.coverage_count} ph/x</div>`;
+    div.addEventListener('click', () => {
+      document.getElementById('carrier-search-input').value = '';
+      listEl.innerHTML = '';
+      activateCarrierCoverage(c);
+    });
+    listEl.appendChild(div);
+  });
 }
 
 async function saveCarrierCoords(carrierName, lat, lng, marker, btn) {
@@ -1453,6 +1590,8 @@ document.getElementById('search-input').addEventListener('input', () => {
   clearTimeout(searchTimer);
   searchTimer = setTimeout(applyFilters, 300);
 });
+
+document.getElementById('carrier-search-input').addEventListener('input', onCarrierSearch);
 
 document.getElementById('chk-points').addEventListener('change', function () {
   if (!clusterGroup) return;
