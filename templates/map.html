@@ -485,8 +485,8 @@
       <div class="panel-title coverage-card-title">Carrier đang active</div>
       <div id="coverage-carrier-name" class="coverage-card-name"></div>
       <div id="coverage-carrier-count" class="coverage-card-count"></div>
-      <div class="coverage-legend">
-        <span class="coverage-legend-item">
+      <div class="coverage-legend" id="coverage-legend">
+        <span class="coverage-legend-item" id="legend-yellow">
           <span class="coverage-dot coverage-dot-yellow"></span>Coverage
         </span>
         <span class="coverage-legend-item">
@@ -680,6 +680,7 @@ let grdpByProvince = {};
 let carrierLayer          = null;
 let departerLayer         = null;
 let allCarriers           = [];     // full list for search
+let carrierMarkerList     = [];     // [{marker, name}] for show/hide
 let carrierCoverage       = null;   // Set<address_string> | null
 let activeCarrierProvince = null;
 let activeCarrierName     = null;
@@ -1356,7 +1357,8 @@ async function loadCarriers() {
       .addTo(departerLayer);
   });
 
-  allCarriers = carriers;
+  allCarriers       = carriers;
+  carrierMarkerList = [];
 
   carriers.forEach(c => {
     const icon = L.divIcon({
@@ -1367,7 +1369,8 @@ async function loadCarriers() {
     const marker = L.marker([c.lat, c.lng], { icon, zIndexOffset: 850 });
     marker._carrierName = c.carrier_name;
     marker.bindPopup(function () { return makeCarrierPopup(c, marker); }, { maxWidth: 320 });
-    marker.on('popupopen', () => activateCarrierCoverage(c));
+    marker.on('click', () => activateCarrierCoverage(c));
+    carrierMarkerList.push({ marker, name: c.carrier_name });
     marker.addTo(carrierLayer);
   });
 
@@ -1457,6 +1460,23 @@ function makeCarrierPopup(c, marker) {
   return div;
 }
 
+function dimOtherCarriers(activeCarrierName) {
+  carrierMarkerList.forEach(({ marker, name }) => {
+    const hide = name !== activeCarrierName;
+    marker.setOpacity(hide ? 0 : 1);
+    const el = marker.getElement();
+    if (el) el.style.pointerEvents = hide ? 'none' : '';
+  });
+}
+
+function restoreCarrierMarkers() {
+  carrierMarkerList.forEach(({ marker }) => {
+    marker.setOpacity(1);
+    const el = marker.getElement();
+    if (el) el.style.pointerEvents = '';
+  });
+}
+
 async function activateCarrierCoverage(carrier) {
   try {
     const data = await fetch(
@@ -1471,6 +1491,7 @@ async function activateCarrierCoverage(carrier) {
     const chkPts = document.getElementById('chk-points');
     if (!chkPts.checked) chkPts.checked = true;
 
+    dimOtherCarriers(carrier.carrier_name);
     buildPoints(filteredAreas);
     showCoverageCard();
 
@@ -1494,14 +1515,22 @@ function clearCarrierCoverage() {
   activeCarrierProvince = null;
   activeCarrierName     = null;
   activeCarrierCount    = 0;
+  restoreCarrierMarkers();
   buildPoints(filteredAreas);
   hideCoverageCard();
 }
 
 function showCoverageCard() {
   document.getElementById('coverage-carrier-name').textContent = activeCarrierName;
-  document.getElementById('coverage-carrier-count').textContent =
-    `${activeCarrierCount} phường/xã được phủ`;
+  const countEl = document.getElementById('coverage-carrier-count');
+  const legendYellow = document.getElementById('legend-yellow');
+  if (activeCarrierCount > 0) {
+    countEl.textContent = `${activeCarrierCount} phường/xã được phủ`;
+    legendYellow.style.display = '';
+  } else {
+    countEl.textContent = 'Chưa có dữ liệu coverage — xem context tỉnh';
+    legendYellow.style.display = 'none';
+  }
   document.getElementById('coverage-card').style.display = 'block';
 }
 
