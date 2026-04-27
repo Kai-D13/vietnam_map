@@ -1480,7 +1480,7 @@ function restoreCarrierMarkers() {
 async function activateCarrierCoverage(carrier) {
   try {
     const data = await fetch(
-      `/api/carriers/${encodeURIComponent(carrier.carrier_name)}/coverage`
+      `/api/carrier_coverage?name=${encodeURIComponent(carrier.carrier_name)}`
     ).then(r => r.json());
 
     carrierCoverage       = new Set(data.addresses);

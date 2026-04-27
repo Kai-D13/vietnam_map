@@ -323,8 +323,11 @@ def api_carriers():
     return jsonify(slim)
 
 
-@app.route("/api/carriers/<path:carrier_name>/coverage")
-def api_carrier_coverage(carrier_name):
+@app.route("/api/carrier_coverage")
+def api_carrier_coverage():
+    carrier_name = request.args.get('name', '').strip()
+    if not carrier_name:
+        return jsonify({"error": "name required"}), 400
     carriers = load_carriers()
     for c in carriers:
         if c['carrier_name'] == carrier_name:
